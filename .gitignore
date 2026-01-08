@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Data and Images
+image_data/
+temp/
+TEMP_PATH/
+TIF_PATH/
+PNG_PATH/
+JSON_PATH/
+polygon.shp
+polygon.shx
+polygon.dbf
+polygon.prj
+line.shp
+line.shx
+line.dbf
+line.prj
+*.png
+*.tif
+*.shp
+*.shx
+*.dbf
+*.prj
+
+# OS
+.DS_Store
+Thumbs.db
