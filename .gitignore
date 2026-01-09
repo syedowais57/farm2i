@@ -8,7 +8,7 @@ venv/
 env/
 
 # Data and Images
-image_data/
+/image_data
 temp/
 TEMP_PATH/
 TIF_PATH/
@@ -22,8 +22,8 @@ line.shp
 line.shx
 line.dbf
 line.prj
-*.png
-*.tif
+# *.png
+# *.tif
 *.shp
 *.shx
 *.dbf
