@@ -1,13 +1,14 @@
 import shapefile
 
-# Coordinates for the Polygon (LineString - lon, lat format)
+# New coordinates provided by the user (LineString format, approx 250m x 350m)
 polygon_coords = [
-    (74.8131613062597, 34.02585101785077),
-    (74.81330082003586, 34.02527131859058),
-    (74.81367976961539, 34.02529006903366),
-    (74.81391354945507, 34.026002582773245),
-    (74.8131575356179, 34.025849455324746),
-    (74.8131613062597, 34.02585101785077)  # Close the polygon
+    (74.86768426089122, 34.08859514192747),
+    (74.8682098349648, 34.089159625234004),
+    (74.87026285869177, 34.08719411890472),
+    (74.86885037836731, 34.08608552600538),
+    (74.86754465527858, 34.08753417516738),
+    (74.86768426089057, 34.08859415072389),
+    (74.86768426089122, 34.08859514192747) # Ensure fully closed
 ]
 
 # Create a shapefile writer for polygon type
@@ -26,5 +27,5 @@ prj_content = 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378
 with open("polygon.prj", "w") as prj:
     prj.write(prj_content)
 
-print("Shapefile created successfully with NEW coordinates!")
+print("Shapefile created successfully with NEW 250m x 350m coordinates!")
 print("Files created: polygon.shp, polygon.shx, polygon.dbf, polygon.prj")
