@@ -208,22 +208,6 @@ class FarmVisionModelService:
                     Band1.append(Band1clip)
                     Band2.append(Band2clip)
                     cloud.append(cloudclip)
-                elif s2_index == 'NDWI':
-                    # NDWI = (Green - NIR) / (Green + NIR)
-                    # Both Green (B03) and NIR (B08) are at 10m resolution - no resampling needed
-                    Band1_href = row['N']   # NIR (B08) - 10m
-                    Band2_href = row['G']   # Green (B03) - 10m
-                    cloud_href = row['SCL']
-                    cloudclip,raster_subset,raster_obj = FarmVisionModelService.cliprs2aoi(cloud_href,farm_polygon)
-                    Band1clip,raster_subset,raster_obj = FarmVisionModelService.cliprs2aoi(Band1_href,farm_polygon)
-                    Band2clip,raster_subset,raster_obj = FarmVisionModelService.cliprs2aoi(Band2_href,farm_polygon)
-                    # SCL is 20m, so upsample to match 10m bands
-                    cloudclip = np.repeat(cloudclip,2, axis=1).repeat(2, axis=0)
-                    shape = Band2clip.shape
-                    cloudclip = cloudclip[:shape[0],:shape[1]]
-                    Band1.append(Band1clip)
-                    Band2.append(Band2clip)
-                    cloud.append(cloudclip)
                 elif s2_index == 'NDMI':
                     Band1_href = row['SWIR']
                     Band2_href = row['N8A']
@@ -382,10 +366,6 @@ class FarmVisionModelService:
                 # Vegetation: Red (bare) -> Yellow (sparse) -> Green (healthy)
                 bounds = [-10000, 0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 10000]
                 colors = ['#8B0000', '#CD5C5C', '#FFA500', '#FFD700', '#ADFF2F', '#7CFC00', '#32CD32', '#228B22', '#006400', '#004d00']
-            elif s2_index == 'NDWI':
-                # Water: Red (no water) -> Yellow -> Cyan -> Blue (water)
-                bounds = [-10000, -2000, 0, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000]
-                colors = ['#8B0000', '#CD853F', '#F0E68C', '#90EE90', '#00CED1', '#00BFFF', '#1E90FF', '#0000FF', '#00008B', '#000080']
             elif s2_index == 'NDMI':
                 # Moisture: Brown (dry) -> Yellow -> Green (moist)
                 bounds = [-10000, -3000, -1000, 0, 1000, 2000, 3000, 4000, 5000, 7000, 10000]
@@ -485,15 +465,14 @@ class FarmVisionModelService:
             median_ndvi,cloudperct,png_ndvi = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'NDVI')
             median_ndmi,cloudperct,png_ndmi = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'NDMI')
             median_msavi,cloudperct,png_msavi = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'MSAVI')
-            median_ndwi,cloudperct,png_ndwi = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'NDWI')
             median_ndre,cloudperct,png_ndre = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'NDRE')
             median_gndvi,cloudperct,png_gndvi = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'GNDVI')
             median_evi,cloudperct,png_evi = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'EVI')
             #logger.info(f"process ndvi for {row} done")
-            return cloudperct,median_ndvi,png_ndvi,median_ndmi,png_ndmi,median_msavi,png_msavi,median_ndwi,png_ndwi,median_ndre,png_ndre,median_gndvi,png_gndvi,median_evi,png_evi
+            return cloudperct,median_ndvi,png_ndvi,median_ndmi,png_ndmi,median_msavi,png_msavi,median_ndre,png_ndre,median_gndvi,png_gndvi,median_evi,png_evi
     
     @staticmethod
-    def plot_index(AppNo,dates,ndvi,ndmi,msavi,ndwi,cloud):
+    def plot_index(AppNo,dates,ndvi,ndmi,msavi,cloud):
           fig, ax1 = plt.subplots()
           mask = np.array(cloud)
           mask[mask<50] =1
@@ -501,11 +480,9 @@ class FarmVisionModelService:
           ndvi = list(np.array(ndvi)*mask*0.0001)
           ndmi = list(np.array(ndmi)*mask*0.0001)
           msavi = list(np.array(msavi)*mask*0.0001)
-          ndwi = list(np.array(ndwi)*mask*0.0001)
           ax1.plot(dates, ndvi, 'g-', label='NDVI')
           #ax1.plot(dates, ndmi, 'b-', label='NDMI')
           #ax1.plot(dates, msavi, 'r-', label='msavi')
-          #ax1.plot(dates, ndwi, 'y-', label='NDWI')
           ax1.set_xlabel('Date')
           ax1.set_ylabel('NDVI', color='g')
           ax1.tick_params(axis='y', labelcolor='g')
@@ -585,8 +562,6 @@ class FarmVisionModelService:
             png_ndmi = []
             msavi = []
             png_msavi = []
-            ndwi = []
-            png_ndwi = []
             ndre = []
             png_ndre = []
             gndvi = []
@@ -601,30 +576,26 @@ class FarmVisionModelService:
                 png_ndmi.append(i[4])
                 msavi.append(i[5])
                 png_msavi.append(i[6])
-                ndwi.append(i[7])
-                png_ndwi.append(i[8])
-                ndre.append(i[9])
-                png_ndre.append(i[10])
-                gndvi.append(i[11])
-                png_gndvi.append(i[12])
-                evi.append(i[13])
-                png_evi.append(i[14])
+                ndre.append(i[7])
+                png_ndre.append(i[8])
+                gndvi.append(i[9])
+                png_gndvi.append(i[10])
+                evi.append(i[11])
+                png_evi.append(i[12])
             dates = [i.split('_')[-2] for i in png_ndvi]
-            FarmVisionModelService.plot_index(AppNo,dates,ndvi,ndmi,msavi,ndwi,cloud)
+            FarmVisionModelService.plot_index(AppNo,dates,ndvi,ndmi,msavi,cloud)
             final_dict = {
                          'cloud' : str(cloud),
                         'dates': str(dates),
                         'NDVI' : str(ndvi),
                         'NDMI' : str(ndmi),
                         'MSAVI' : str(msavi),
-                        'NDWI' : str(ndwi),
                         'NDRE' : str(ndre),
                         'GNDVI' : str(gndvi),
                         'EVI' : str(evi),
                         'png_ndvi' : png_ndvi,
                         'png_ndmi' : png_ndmi,
                         'png_msavi' : png_msavi,
-                        'png_ndwi' : png_ndwi,
                         'png_ndre' : png_ndre,
                         'png_gndvi' : png_gndvi,
                         'png_evi' : png_evi
