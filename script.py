@@ -52,7 +52,9 @@ class FarmVisionModelService:
                          'R': item.assets['red'].href,
                          'N': item.assets['nir'].href,
                          'G': item.assets['green'].href,
+                         'B': item.assets['blue'].href,
                          'N8A': item.assets['nir08'].href,
+                         'RE1': item.assets['rededge1'].href,
                          'SWIR': item.assets['swir16'].href,
                          'SCL' : item.assets['scl'].href,
                          }
@@ -179,17 +181,18 @@ class FarmVisionModelService:
             #t2 = int(time.time())
             Band1 = []
             Band2 = []
+            Band3 = []  # For EVI (Blue band)
             cloud = []
             '''
             10m : R(B04), G(B03), B(B02), NIR(B08)
             20m : Red Edge(B05), SWIR(B11), B8A
             # Indices formulae
             NDVI = NIR(B08) - RED(B04) / NIR(B08) + RED(B04)
-            NDWI = GREEN(B03) - NIR(B08)/GREEN(B03) + NIR(B08)
+            #NDWI = GREEN(B03) - NIR(B08)/GREEN(B03) + NIR(B08)
             NDMI = NIR(B8A) - SWIR(B11) / NIR(B8A) + SWIR(B11)
-            #NDRE = NIR(B08) - RED EDGE(B05) / NIR(B08) + RED EDGE(B05)
+            NDRE = NIR(B08) - RED EDGE(B05) / NIR(B08) + RED EDGE(B05)
             CHL   = RED EDGE(B8a) - Red(B04) / RED EDGE(B8a) + Red(B04)
-            EVI = 2.5 * ((B8 – B4) / (B8 + 6 * B4 – 7.5 * B2 + 1))
+            #EVI = 2.5 * ((B8 – B4) / (B8 + 6 * B4 – 7.5 * B2 + 1))
             '''
             for index, row in filtered_data.iterrows():
                 if (s2_index == 'NDVI') | (s2_index=='MSAVI'):
@@ -206,12 +209,15 @@ class FarmVisionModelService:
                     Band2.append(Band2clip)
                     cloud.append(cloudclip)
                 elif s2_index == 'NDWI':
-                    Band1_href = row['N']
-                    Band2_href = row['G']
+                    # NDWI = (Green - NIR) / (Green + NIR)
+                    # Both Green (B03) and NIR (B08) are at 10m resolution - no resampling needed
+                    Band1_href = row['N']   # NIR (B08) - 10m
+                    Band2_href = row['G']   # Green (B03) - 10m
                     cloud_href = row['SCL']
                     cloudclip,raster_subset,raster_obj = FarmVisionModelService.cliprs2aoi(cloud_href,farm_polygon)
                     Band1clip,raster_subset,raster_obj = FarmVisionModelService.cliprs2aoi(Band1_href,farm_polygon)
                     Band2clip,raster_subset,raster_obj = FarmVisionModelService.cliprs2aoi(Band2_href,farm_polygon)
+                    # SCL is 20m, so upsample to match 10m bands
                     cloudclip = np.repeat(cloudclip,2, axis=1).repeat(2, axis=0)
                     shape = Band2clip.shape
                     cloudclip = cloudclip[:shape[0],:shape[1]]
@@ -238,6 +244,60 @@ class FarmVisionModelService:
                     Band1.append(Band1clip)
                     Band2.append(Band2clip)
                     cloud.append(cloudclip)
+                elif s2_index == 'NDRE':
+                    # NDRE = (NIR - Red Edge) / (NIR + Red Edge)
+                    # NIR (B08) is 10m, RE1 (B05) is 20m - needs resampling
+                    Band1_href = row['RE1']  # Red Edge (B05) - 20m
+                    Band2_href = row['N']    # NIR (B08) - 10m
+                    cloud_href = row['SCL']
+                    cloudclip,raster_subset,raster_obj = FarmVisionModelService.cliprs2aoi(cloud_href,farm_polygon)
+                    Band1clip,raster_subset,raster_obj = FarmVisionModelService.cliprs2aoi(Band1_href,farm_polygon)
+                    # Upsample RE1 from 20m to 10m
+                    Band1clip = np.repeat(Band1clip,2, axis=1).repeat(2, axis=0)
+                    Band2clip,raster_subset,raster_obj = FarmVisionModelService.cliprs2aoi(Band2_href,farm_polygon)
+                    shape = Band2clip.shape
+                    Band1clip = Band1clip[:shape[0],:shape[1]]
+                    # SCL is 20m, so upsample to match 10m bands
+                    cloudclip = np.repeat(cloudclip,2, axis=1).repeat(2, axis=0)
+                    cloudclip = cloudclip[:shape[0],:shape[1]]
+                    Band1.append(Band1clip)
+                    Band2.append(Band2clip)
+                    cloud.append(cloudclip)
+                elif s2_index == 'GNDVI':
+                    # GNDVI = (NIR - Green) / (NIR + Green)
+                    # Both NIR (B08) and Green (B03) are at 10m resolution
+                    Band1_href = row['G']   # Green (B03) - 10m
+                    Band2_href = row['N']   # NIR (B08) - 10m
+                    cloud_href = row['SCL']
+                    cloudclip,raster_subset,raster_obj = FarmVisionModelService.cliprs2aoi(cloud_href,farm_polygon)
+                    Band1clip,raster_subset,raster_obj = FarmVisionModelService.cliprs2aoi(Band1_href,farm_polygon)
+                    Band2clip,raster_subset,raster_obj = FarmVisionModelService.cliprs2aoi(Band2_href,farm_polygon)
+                    # SCL is 20m, so upsample to match 10m bands
+                    cloudclip = np.repeat(cloudclip,2, axis=1).repeat(2, axis=0)
+                    shape = Band2clip.shape
+                    cloudclip = cloudclip[:shape[0],:shape[1]]
+                    Band1.append(Band1clip)
+                    Band2.append(Band2clip)
+                    cloud.append(cloudclip)
+                elif s2_index == 'EVI':
+                    # EVI = 2.5 * ((NIR - Red) / (NIR + 6*Red - 7.5*Blue + 1))
+                    # All bands (B08, B04, B02) are at 10m resolution
+                    Band1_href = row['R']   # Red (B04) - 10m
+                    Band2_href = row['N']   # NIR (B08) - 10m
+                    Band3_href = row['B']   # Blue (B02) - 10m
+                    cloud_href = row['SCL']
+                    cloudclip,raster_subset,raster_obj = FarmVisionModelService.cliprs2aoi(cloud_href,farm_polygon)
+                    Band1clip,raster_subset,raster_obj = FarmVisionModelService.cliprs2aoi(Band1_href,farm_polygon)
+                    Band2clip,raster_subset,raster_obj = FarmVisionModelService.cliprs2aoi(Band2_href,farm_polygon)
+                    Band3clip,raster_subset,raster_obj = FarmVisionModelService.cliprs2aoi(Band3_href,farm_polygon)
+                    # SCL is 20m, so upsample to match 10m bands
+                    cloudclip = np.repeat(cloudclip,2, axis=1).repeat(2, axis=0)
+                    shape = Band2clip.shape
+                    cloudclip = cloudclip[:shape[0],:shape[1]]
+                    Band1.append(Band1clip)
+                    Band2.append(Band2clip)
+                    Band3.append(Band3clip)
+                    cloud.append(cloudclip)
             minxlist = [i.shape[0] for i in Band1]
             minylist = [i.shape[1] for i in Band1]
             min_x = np.min(minxlist)
@@ -256,12 +316,25 @@ class FarmVisionModelService:
             cloud = np.dstack(cloud)
             cloud = np.rollaxis(cloud, -1)
             cloud = cloud.min(axis=0)
-            if (s2_index == 'NDVI') | (s2_index == 'NDMI') | (s2_index == 'NDWI'):
+            if (s2_index == 'NDVI') | (s2_index == 'NDMI') | (s2_index == 'NDWI') | (s2_index == 'NDRE') | (s2_index == 'GNDVI'):
                 calculated_index = (Band2 - Band1) / (Band2 + Band1)
             elif s2_index == 'MSAVI':
                 a = (2*Band2*0.0001+1)**2
                 b = 8*(Band2*0.0001-Band1*0.0001)
                 calculated_index = (2*Band2*0.0001 + 1 -np.sqrt(a-b))/2
+            elif s2_index == 'EVI':
+                # EVI = 2.5 * ((NIR - Red) / (NIR + 6*Red - 7.5*Blue + 1))
+                # Process Band3 for EVI
+                Band3 = [i[:min_x,:min_y] for i in Band3]
+                Band3 = np.dstack(Band3)
+                Band3 = np.rollaxis(Band3, -1)
+                Band3 = Band3.astype(np.int16)
+                Band3 = Band3+1000
+                # Scale to reflectance (divide by 10000)
+                nir = Band2 * 0.0001
+                red = Band1 * 0.0001
+                blue = Band3 * 0.0001
+                calculated_index = 2.5 * ((nir - red) / (nir + 6*red - 7.5*blue + 1))
             max_index = calculated_index.max(axis=0)
             max_index[max_index > 1] = 1
             destination = TEMP_PATH + s2_index+'_'+str(uuid.uuid4())+TIF
@@ -321,6 +394,18 @@ class FarmVisionModelService:
                 # Soil-adjusted vegetation: similar to NDVI
                 bounds = [-10000, 0, 500, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 10000]
                 colors = ['#8B0000', '#CD5C5C', '#FF6347', '#FFA500', '#FFD700', '#ADFF2F', '#7CFC00', '#32CD32', '#228B22', '#006400']
+            elif s2_index == 'NDRE':
+                # Red Edge vegetation: Brown (stressed) -> Yellow -> Green (healthy)
+                bounds = [-10000, 0, 500, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 10000]
+                colors = ['#8B4513', '#CD853F', '#DEB887', '#F0E68C', '#ADFF2F', '#7CFC00', '#32CD32', '#228B22', '#006400', '#004d00']
+            elif s2_index == 'GNDVI':
+                # Green NDVI: Red (bare) -> Yellow (sparse) -> Green (healthy)
+                bounds = [-10000, 0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 10000]
+                colors = ['#8B0000', '#CD5C5C', '#FF8C00', '#FFD700', '#9ACD32', '#7CFC00', '#32CD32', '#228B22', '#006400', '#004d00']
+            elif s2_index == 'EVI':
+                # Enhanced Vegetation Index: similar scale to NDVI but different range
+                bounds = [-10000, -1000, 0, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000]
+                colors = ['#8B0000', '#CD5C5C', '#FFA500', '#FFD700', '#ADFF2F', '#7CFC00', '#32CD32', '#228B22', '#006400', '#004d00']
             else:
                 # Default fallback
                 bounds = [-10000, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 10000]
@@ -401,8 +486,11 @@ class FarmVisionModelService:
             median_ndmi,cloudperct,png_ndmi = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'NDMI')
             median_msavi,cloudperct,png_msavi = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'MSAVI')
             median_ndwi,cloudperct,png_ndwi = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'NDWI')
+            median_ndre,cloudperct,png_ndre = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'NDRE')
+            median_gndvi,cloudperct,png_gndvi = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'GNDVI')
+            median_evi,cloudperct,png_evi = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'EVI')
             #logger.info(f"process ndvi for {row} done")
-            return cloudperct,median_ndvi,png_ndvi,median_ndmi,png_ndmi,median_msavi,png_msavi,median_ndwi,png_ndwi
+            return cloudperct,median_ndvi,png_ndvi,median_ndmi,png_ndmi,median_msavi,png_msavi,median_ndwi,png_ndwi,median_ndre,png_ndre,median_gndvi,png_gndvi,median_evi,png_evi
     
     @staticmethod
     def plot_index(AppNo,dates,ndvi,ndmi,msavi,ndwi,cloud):
@@ -499,6 +587,12 @@ class FarmVisionModelService:
             png_msavi = []
             ndwi = []
             png_ndwi = []
+            ndre = []
+            png_ndre = []
+            gndvi = []
+            png_gndvi = []
+            evi = []
+            png_evi = []
             for i in results:
                 cloud.append(i[0])
                 ndvi.append(i[1])
@@ -509,6 +603,12 @@ class FarmVisionModelService:
                 png_msavi.append(i[6])
                 ndwi.append(i[7])
                 png_ndwi.append(i[8])
+                ndre.append(i[9])
+                png_ndre.append(i[10])
+                gndvi.append(i[11])
+                png_gndvi.append(i[12])
+                evi.append(i[13])
+                png_evi.append(i[14])
             dates = [i.split('_')[-2] for i in png_ndvi]
             FarmVisionModelService.plot_index(AppNo,dates,ndvi,ndmi,msavi,ndwi,cloud)
             final_dict = {
@@ -518,15 +618,27 @@ class FarmVisionModelService:
                         'NDMI' : str(ndmi),
                         'MSAVI' : str(msavi),
                         'NDWI' : str(ndwi),
+                        'NDRE' : str(ndre),
+                        'GNDVI' : str(gndvi),
+                        'EVI' : str(evi),
                         'png_ndvi' : png_ndvi,
                         'png_ndmi' : png_ndmi,
                         'png_msavi' : png_msavi,
-                        'png_ndwi' : png_ndwi
+                        'png_ndwi' : png_ndwi,
+                        'png_ndre' : png_ndre,
+                        'png_gndvi' : png_gndvi,
+                        'png_evi' : png_evi
                         }
             with open("{}S2_Indices_{}.json".format(JSON_PATH,AppNo), "w") as outfile: 
                 json.dump(final_dict, outfile)
             
-            os.system("rm {}".format(TEMP_PATH+'*.tif'))
+            # Clean up temp files (cross-platform)
+            import glob
+            for f in glob.glob(TEMP_PATH+'*.tif'):
+                try:
+                    os.remove(f)
+                except:
+                    pass
             end_time = int(time.time())
             print("TIME TAKEN for {} is {} Mins".format(AppNo,round((end_time-start_time)/60,2)))
             return final_dict

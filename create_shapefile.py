@@ -1,14 +1,13 @@
 import shapefile
 
-# New coordinates provided by the user (LineString format, approx 250m x 350m)
+# Coordinates from MongoDB document "Testing payment" (0.4376 acres)
+# Format: (longitude, latitude) - WGS84
 polygon_coords = [
-    (74.86768426089122, 34.08859514192747),
-    (74.8682098349648, 34.089159625234004),
-    (74.87026285869177, 34.08719411890472),
-    (74.86885037836731, 34.08608552600538),
-    (74.86754465527858, 34.08753417516738),
-    (74.86768426089057, 34.08859415072389),
-    (74.86768426089122, 34.08859514192747) # Ensure fully closed
+    (74.81327442321802, 34.02555224449088),  # Point 0
+    (74.81373755130355, 34.02566191157703),  # Point 1
+    (74.8139038482608, 34.02541293744765),   # Point 2
+    (74.81332091484, 34.02524399030139),     # Point 3
+    (74.81327442321802, 34.02555224449088),  # Close polygon (same as Point 0)
 ]
 
 # Create a shapefile writer for polygon type
