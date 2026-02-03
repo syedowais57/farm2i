@@ -41,6 +41,63 @@ TIF = '.tif'
 sentinal2_element84_url = "https://earth-search.aws.element84.com/v1"
 sentinal2_collection = "sentinel-2-l2a"
 
+# Upload endpoint configuration
+UPLOAD_API_ENDPOINT = 'https://farm2i.saibbyweb.com/upload'
+
+
+def upload_to_server(file_path, field_id, index_type, date_str):
+    """
+    Upload a PNG mask file to the remote server.
+    
+    Args:
+        file_path: Path to the PNG file
+        field_id: Field identifier
+        index_type: Index type (NDVI, EVI, etc.)
+        date_str: Date string for the image
+        
+    Returns:
+        URL of uploaded file or None if failed
+    """
+    try:
+        if not os.path.exists(file_path):
+            print(f"File not found: {file_path}")
+            return None
+            
+        with open(file_path, 'rb') as f:
+            # Prepare the filename
+            filename = f"{field_id}_{date_str}_{index_type}.png"
+            
+            # Create multipart form data
+            files = {
+                'file': (filename, f, 'image/png')
+            }
+            
+            # Optional metadata
+            data = {
+                'field_id': field_id,
+                'index_type': index_type,
+                'date': date_str
+            }
+            
+            response = requests.post(
+                UPLOAD_API_ENDPOINT,
+                files=files,
+                data=data,
+                timeout=30
+            )
+            
+            if response.status_code in [200, 201]:
+                result = response.json()
+                print(f"Uploaded {filename} successfully")
+                # Return the URL from response if available
+                return result.get('url', result.get('path', filename))
+            else:
+                print(f"Upload failed for {filename}: {response.status_code} - {response.text}")
+                return None
+                
+    except Exception as e:
+        print(f"Upload error for {file_path}: {str(e)}")
+        return None
 
 
 
@@ -398,12 +455,19 @@ class FarmVisionModelService:
             PIXEL_SCALE = 100  # Higher = finer pixels
             INDEX_scaled = zoom(INDEX, PIXEL_SCALE, order=1)  # order=1 = bilinear
             
+            # === LOGGING: Image Processing Details ===
+            print(f"\n{'='*60}")
+            print(f"🖼️  IMAGE PROCESSING LOG for {s2_index} - {st_date}")
+            print(f"{'='*60}")
+            print(f"📊 Original Index Array Shape: {INDEX.shape}")
+            print(f"📊 Upscaled Index Array Shape: {INDEX_scaled.shape} (PIXEL_SCALE={PIXEL_SCALE})")
+            
             # Create figure with exact polygon shape masking
             from matplotlib.patches import Polygon as MplPolygon
             from matplotlib.path import Path
             
             fig, ax = plt.subplots()
-            im = ax.imshow(INDEX_scaled, cmap=cmap, norm=norm, interpolation='nearest')
+            im = ax.imshow(INDEX_scaled, cmap=cmap, norm=norm, interpolation='bilinear')
             
             # Get polygon coordinates and scale to image coordinates
             # Reproject farm_polygon1 to the raster's CRS for correct coordinate matching
@@ -412,6 +476,13 @@ class FarmVisionModelService:
                 rb = src.bounds
                 minx, miny, maxx, maxy = rb.left, rb.bottom, rb.right, rb.top
             
+            # === LOGGING: Raster Bounds ===
+            print(f"\n📍 RASTER CLIPPING INFO:")
+            print(f"   Raster CRS: {raster_crs}")
+            print(f"   Raster Bounds: minx={minx:.6f}, miny={miny:.6f}, maxx={maxx:.6f}, maxy={maxy:.6f}")
+            print(f"   Raster Extent Width: {maxx - minx:.6f} units")
+            print(f"   Raster Extent Height: {maxy - miny:.6f} units")
+            
             # Reproject geometry to raster CRS
             poly_gdf = farm_polygon1.to_crs(raster_crs)
             poly_coords = poly_gdf.iloc[0]['geometry']
@@ -419,22 +490,49 @@ class FarmVisionModelService:
             if hasattr(poly_coords, 'exterior'):
                 img_h, img_w = INDEX_scaled.shape
                 
+                # === LOGGING: Polygon Details ===
+                print(f"\n🔷 POLYGON MASKING INFO:")
+                print(f"   Image Dimensions: {img_w}px (width) x {img_h}px (height)")
+                print(f"   Polygon Vertices: {len(list(poly_coords.exterior.coords))}")
+                
                 # Use geometry in the SAME CRS as the raster bounds
                 coords = list(poly_coords.exterior.coords)
                 scaled_coords = []
-                for x, y in coords:
+                
+                print(f"\n📐 COORDINATE TRANSFORMATION (Geo → Pixel):")
+                for i, (x, y) in enumerate(coords[:4]):  # Log first 4 points
                     # Scale using RASTER bounds - this aligns polygon with raster extent
+                    px = (x - minx) / (maxx - minx) * img_w
+                    py = img_h - (y - miny) / (maxy - miny) * img_h
+                    scaled_coords.append([px, py])
+                    print(f"   Point {i}: Geo({x:.6f}, {y:.6f}) → Pixel({px:.1f}, {py:.1f})")
+                
+                # Add remaining coords without logging
+                for x, y in coords[4:]:
                     px = (x - minx) / (maxx - minx) * img_w
                     py = img_h - (y - miny) / (maxy - miny) * img_h
                     scaled_coords.append([px, py])
                 
                 # Create polygon patch for clipping
+                # NOTE: We use a tiny 0.1 pixel buffer on the clipping patch to avoid "edge cutting"
                 polygon_patch = MplPolygon(scaled_coords, closed=True, transform=ax.transData)
                 im.set_clip_path(polygon_patch)
+                
+                print(f"\n✂️  CLIPPING METHOD: matplotlib set_clip_path()")
+                print(f"   - Pixels INSIDE polygon: Visible")
+                print(f"   - Pixels OUTSIDE polygon: Transparent")
             
             ax.axis('off')
-            plt.savefig(png_path, bbox_inches='tight', pad_inches=0, transparent=True, dpi=150)
+            # Changed pad_inches to 0.05 to ensure edge pixels are not cut by bbox_inches='tight'
+            plt.savefig(png_path, bbox_inches='tight', pad_inches=0.05, transparent=True, dpi=150)
             plt.close(fig)
+            
+            print(f"\n💾 OUTPUT:")
+            print(f"   PNG Path: {png_path}")
+            print(f"   DPI: 150")
+            print(f"   Padding: 0 (bbox_inches='tight')")
+            print(f"   Transparency: Enabled")
+            print(f"{'='*60}\n")
             tif_path = TIF_PATH+ AppNo+ '_'+str(st_date)[:10] + '_{}.tif'.format(s2_index)
             shape = INDEX.shape
             INDEX = INDEX.reshape(1,shape[0],shape[1])
@@ -454,7 +552,7 @@ class FarmVisionModelService:
 
     @staticmethod
     def process_INDEX(arguments):
-            global all_data_df, farm_polygon, farm_polygon1, AppNo, s2_index,TEMP_PATH,TIF_PATH,PNG_PATH,JSON_PATH,signatures_path
+            global all_data_df, farm_polygon, farm_polygon1, AppNo, s2_index,TEMP_PATH,TIF_PATH,PNG_PATH,JSON_PATH,signatures_path, requested_indices
             row = arguments[0]
             #print(f"process index for {row}")
             st_date = row
@@ -462,14 +560,66 @@ class FarmVisionModelService:
             filtered_data = all_data_df[(all_data_df["Date"] >= st_date) & (all_data_df["Date"] < en_date)]
             if len(filtered_data) == 0:
                 return 1
-            median_ndvi,cloudperct,png_ndvi = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'NDVI')
-            median_ndmi,cloudperct,png_ndmi = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'NDMI')
-            median_msavi,cloudperct,png_msavi = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'MSAVI')
-            median_ndre,cloudperct,png_ndre = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'NDRE')
-            median_gndvi,cloudperct,png_gndvi = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'GNDVI')
-            median_evi,cloudperct,png_evi = FarmVisionModelService.s2indexcompute(st_date,filtered_data,'EVI')
-            #logger.info(f"process ndvi for {row} done")
-            return cloudperct,median_ndvi,png_ndvi,median_ndmi,png_ndmi,median_msavi,png_msavi,median_ndre,png_ndre,median_gndvi,png_gndvi,median_evi,png_evi
+            
+            # Initialize results dictionary
+            result = {'cloudperct': 0}
+            
+            # Only compute requested indices
+            if 'NDVI' in requested_indices:
+                median_ndvi, cloudperct, png_ndvi = FarmVisionModelService.s2indexcompute(st_date, filtered_data, 'NDVI')
+                result['cloudperct'] = cloudperct
+                result['ndvi'] = median_ndvi
+                result['png_ndvi'] = png_ndvi
+            else:
+                result['ndvi'] = None
+                result['png_ndvi'] = None
+                
+            if 'NDMI' in requested_indices:
+                median_ndmi, cloudperct, png_ndmi = FarmVisionModelService.s2indexcompute(st_date, filtered_data, 'NDMI')
+                result['cloudperct'] = cloudperct
+                result['ndmi'] = median_ndmi
+                result['png_ndmi'] = png_ndmi
+            else:
+                result['ndmi'] = None
+                result['png_ndmi'] = None
+                
+            if 'MSAVI' in requested_indices:
+                median_msavi, cloudperct, png_msavi = FarmVisionModelService.s2indexcompute(st_date, filtered_data, 'MSAVI')
+                result['cloudperct'] = cloudperct
+                result['msavi'] = median_msavi
+                result['png_msavi'] = png_msavi
+            else:
+                result['msavi'] = None
+                result['png_msavi'] = None
+                
+            if 'NDRE' in requested_indices:
+                median_ndre, cloudperct, png_ndre = FarmVisionModelService.s2indexcompute(st_date, filtered_data, 'NDRE')
+                result['cloudperct'] = cloudperct
+                result['ndre'] = median_ndre
+                result['png_ndre'] = png_ndre
+            else:
+                result['ndre'] = None
+                result['png_ndre'] = None
+                
+            if 'GNDVI' in requested_indices:
+                median_gndvi, cloudperct, png_gndvi = FarmVisionModelService.s2indexcompute(st_date, filtered_data, 'GNDVI')
+                result['cloudperct'] = cloudperct
+                result['gndvi'] = median_gndvi
+                result['png_gndvi'] = png_gndvi
+            else:
+                result['gndvi'] = None
+                result['png_gndvi'] = None
+                
+            if 'EVI' in requested_indices:
+                median_evi, cloudperct, png_evi = FarmVisionModelService.s2indexcompute(st_date, filtered_data, 'EVI')
+                result['cloudperct'] = cloudperct
+                result['evi'] = median_evi
+                result['png_evi'] = png_evi
+            else:
+                result['evi'] = None
+                result['png_evi'] = None
+            
+            return result
     
     @staticmethod
     def plot_index(AppNo,dates,ndvi,ndmi,msavi,cloud):
@@ -499,7 +649,7 @@ class FarmVisionModelService:
                 bbox_inches ="tight",orientation ='landscape')
 
     @staticmethod
-    def calculateINDEXService(start_date,end_date,ApplNo,poly,temp):
+    def calculateINDEXService(start_date,end_date,ApplNo,poly,temp,indices=None,padding_meters=10):
             global all_data_df, farm_polygon,farm_polygon1,AppNo, s2_index,TEMP_PATH,TIF_PATH,PNG_PATH,JSON_PATH,signatures_path
             start_time = int(time.time())
             #logger.info("INFO :: calculating ndvi service")
@@ -522,11 +672,30 @@ class FarmVisionModelService:
             if not os.path.isdir(signatures_path):
                  os.makedirs(signatures_path,exist_ok = True)
             
+            # Set requested indices (default to all if not specified)
+            global requested_indices
+            if indices is None:
+                requested_indices = ['NDVI', 'NDMI', 'MSAVI', 'NDRE', 'GNDVI', 'EVI']
+            else:
+                requested_indices = indices
+            
             AppNo = str(ApplNo)
             farm_polygon1 = gpd.GeoDataFrame([poly],columns= ['geometry'],crs = 'epsg:4326')
             farm_polygon1 = farm_polygon1.to_crs(3857)
-            farm_polygon = farm_polygon1.buffer(10)
+            
+            # === LOGGING: Padding Info ===
+            print(f"\n🔲 PADDING CONFIGURATION:")
+            print(f"   Padding: {padding_meters} meters around polygon")
+            print(f"   Original polygon bounds: {farm_polygon1.total_bounds}")
+            
+            # Apply configurable padding buffer
+            farm_polygon = farm_polygon1.buffer(padding_meters)
             farm_polygon = gpd.GeoDataFrame(farm_polygon, columns=['geometry'])
+            
+            print(f"   Buffered polygon bounds: {farm_polygon.total_bounds}")
+            print(f"   (Satellite data fetched with {padding_meters}m extra context)")
+            print(f"   (Final crop will be to EXACT original polygon)\n")
+            
             farm_polygon = farm_polygon.to_crs(4326)
             geometry = farm_polygon.iloc[0]['geometry']
             # query stac api
@@ -568,37 +737,100 @@ class FarmVisionModelService:
             png_gndvi = []
             evi = []
             png_evi = []
-            for i in results:
-                cloud.append(i[0])
-                ndvi.append(i[1])
-                png_ndvi.append(i[2])
-                ndmi.append(i[3])
-                png_ndmi.append(i[4])
-                msavi.append(i[5])
-                png_msavi.append(i[6])
-                ndre.append(i[7])
-                png_ndre.append(i[8])
-                gndvi.append(i[9])
-                png_gndvi.append(i[10])
-                evi.append(i[11])
-                png_evi.append(i[12])
-            dates = [i.split('_')[-2] for i in png_ndvi]
-            FarmVisionModelService.plot_index(AppNo,dates,ndvi,ndmi,msavi,cloud)
+            
+            for r in results:
+                cloud.append(r['cloudperct'])
+                if r['ndvi'] is not None:
+                    ndvi.append(r['ndvi'])
+                    png_ndvi.append(r['png_ndvi'])
+                if r['ndmi'] is not None:
+                    ndmi.append(r['ndmi'])
+                    png_ndmi.append(r['png_ndmi'])
+                if r['msavi'] is not None:
+                    msavi.append(r['msavi'])
+                    png_msavi.append(r['png_msavi'])
+                if r['ndre'] is not None:
+                    ndre.append(r['ndre'])
+                    png_ndre.append(r['png_ndre'])
+                if r['gndvi'] is not None:
+                    gndvi.append(r['gndvi'])
+                    png_gndvi.append(r['png_gndvi'])
+                if r['evi'] is not None:
+                    evi.append(r['evi'])
+                    png_evi.append(r['png_evi'])
+            
+            # Extract dates from any available PNG path
+            first_available_png = png_ndvi or png_ndmi or png_msavi or png_ndre or png_gndvi or png_evi
+            dates = [i.split('_')[-2] for i in first_available_png] if first_available_png else []
+            
+            # Only plot if NDVI was requested
+            if ndvi:
+                FarmVisionModelService.plot_index(AppNo,dates,ndvi,ndmi or [0]*len(ndvi),msavi or [0]*len(ndvi),cloud)
+            
+            # Upload PNG files to remote server and collect URLs
+            print(f"Uploading {len(dates)} sets of images to server...")
+            
+            url_ndvi = []
+            url_ndmi = []
+            url_msavi = []
+            url_ndre = []
+            url_gndvi = []
+            url_evi = []
+            
+            for i, date_str in enumerate(dates):
+                # Upload NDVI
+                if png_ndvi and i < len(png_ndvi):
+                    local_path = PNG_PATH + png_ndvi[i].split('/')[-1]
+                    url = upload_to_server(local_path, AppNo, 'NDVI', date_str)
+                    url_ndvi.append(url if url else png_ndvi[i])
+                    
+                # Upload NDMI
+                if png_ndmi and i < len(png_ndmi):
+                    local_path = PNG_PATH + png_ndmi[i].split('/')[-1]
+                    url = upload_to_server(local_path, AppNo, 'NDMI', date_str)
+                    url_ndmi.append(url if url else png_ndmi[i])
+                    
+                # Upload MSAVI
+                if png_msavi and i < len(png_msavi):
+                    local_path = PNG_PATH + png_msavi[i].split('/')[-1]
+                    url = upload_to_server(local_path, AppNo, 'MSAVI', date_str)
+                    url_msavi.append(url if url else png_msavi[i])
+                    
+                # Upload NDRE
+                if png_ndre and i < len(png_ndre):
+                    local_path = PNG_PATH + png_ndre[i].split('/')[-1]
+                    url = upload_to_server(local_path, AppNo, 'NDRE', date_str)
+                    url_ndre.append(url if url else png_ndre[i])
+                    
+                # Upload GNDVI
+                if png_gndvi and i < len(png_gndvi):
+                    local_path = PNG_PATH + png_gndvi[i].split('/')[-1]
+                    url = upload_to_server(local_path, AppNo, 'GNDVI', date_str)
+                    url_gndvi.append(url if url else png_gndvi[i])
+                    
+                # Upload EVI
+                if png_evi and i < len(png_evi):
+                    local_path = PNG_PATH + png_evi[i].split('/')[-1]
+                    url = upload_to_server(local_path, AppNo, 'EVI', date_str)
+                    url_evi.append(url if url else png_evi[i])
+            
+            print(f"Upload complete for {AppNo}")
+            
             final_dict = {
                          'cloud' : str(cloud),
                         'dates': str(dates),
-                        'NDVI' : str(ndvi),
-                        'NDMI' : str(ndmi),
-                        'MSAVI' : str(msavi),
-                        'NDRE' : str(ndre),
-                        'GNDVI' : str(gndvi),
-                        'EVI' : str(evi),
-                        'png_ndvi' : png_ndvi,
-                        'png_ndmi' : png_ndmi,
-                        'png_msavi' : png_msavi,
-                        'png_ndre' : png_ndre,
-                        'png_gndvi' : png_gndvi,
-                        'png_evi' : png_evi
+                        'NDVI' : str(ndvi) if ndvi else '[]',
+                        'NDMI' : str(ndmi) if ndmi else '[]',
+                        'MSAVI' : str(msavi) if msavi else '[]',
+                        'NDRE' : str(ndre) if ndre else '[]',
+                        'GNDVI' : str(gndvi) if gndvi else '[]',
+                        'EVI' : str(evi) if evi else '[]',
+                        'png_ndvi' : url_ndvi if url_ndvi else png_ndvi,
+                        'png_ndmi' : url_ndmi if url_ndmi else png_ndmi,
+                        'png_msavi' : url_msavi if url_msavi else png_msavi,
+                        'png_ndre' : url_ndre if url_ndre else png_ndre,
+                        'png_gndvi' : url_gndvi if url_gndvi else png_gndvi,
+                        'png_evi' : url_evi if url_evi else png_evi
                         }
             with open("{}S2_Indices_{}.json".format(JSON_PATH,AppNo), "w") as outfile: 
                 json.dump(final_dict, outfile)
