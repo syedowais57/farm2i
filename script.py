@@ -220,7 +220,7 @@ class FarmVisionModelService:
                                                                    out_shape=(raster_subset.shape[0],
                                                                               raster_subset.shape[1]),
                                                                    transform=raster_subset.affine,
-                                                                   all_touched=False,
+                                                                   all_touched=True,
                                                                    invert=True)
                     return raster_subset.array * polygon_mask, raster_subset, raster_obj
 
@@ -404,8 +404,15 @@ class FarmVisionModelService:
                                         dtype=max_index.dtype, transform=temp.meta['transform'], )
             new_dataset.write(temp_index)
             new_dataset.close()
-            FarmVisionModelService.Clip_raster(output_surface, farm_polygon1, Clipped_raster)
-            FarmVisionModelService.Clip_raster(cloudpath, farm_polygon1, cloud_clip)
+            # Use a slightly buffered polygon for raster clipping to ensure all edge pixels are included
+            # The matplotlib clip will do the precise polygon masking later
+            RASTER_CLIP_BUFFER = 5  # meters buffer to prevent edge pixel loss
+            farm_polygon1_buffered = farm_polygon1.copy()
+            farm_polygon1_buffered['geometry'] = farm_polygon1_buffered.buffer(RASTER_CLIP_BUFFER)
+            print(f"🔧 RASTER CLIP: Using {RASTER_CLIP_BUFFER}m buffer for raster clipping to prevent edge loss")
+            
+            FarmVisionModelService.Clip_raster(output_surface, farm_polygon1_buffered, Clipped_raster)
+            FarmVisionModelService.Clip_raster(cloudpath, farm_polygon1_buffered, cloud_clip)
             cloud = rasterio.open(cloud_clip).read(1)
             cloud_value = round((((cloudclip==9) | (cloudclip==3)).sum()/(cloudclip!=0).sum())*100,2)
             max_index = rasterio.open(Clipped_raster).read(1)
@@ -513,9 +520,27 @@ class FarmVisionModelService:
                     py = img_h - (y - miny) / (maxy - miny) * img_h
                     scaled_coords.append([px, py])
                 
-                # Create polygon patch for clipping
-                # NOTE: We use a tiny 0.1 pixel buffer on the clipping patch to avoid "edge cutting"
-                polygon_patch = MplPolygon(scaled_coords, closed=True, transform=ax.transData)
+                # Apply a small buffer to prevent edge pixel cutting
+                # Expand polygon outward by 2 pixels from centroid
+                PIXEL_BUFFER = 2  # pixels to expand
+                centroid_x = sum(c[0] for c in scaled_coords) / len(scaled_coords)
+                centroid_y = sum(c[1] for c in scaled_coords) / len(scaled_coords)
+                buffered_coords = []
+                for px, py in scaled_coords:
+                    # Vector from centroid to point
+                    dx = px - centroid_x
+                    dy = py - centroid_y
+                    dist = (dx**2 + dy**2) ** 0.5
+                    if dist > 0:
+                        # Expand outward by PIXEL_BUFFER pixels
+                        px += (dx / dist) * PIXEL_BUFFER
+                        py += (dy / dist) * PIXEL_BUFFER
+                    buffered_coords.append([px, py])
+                
+                print(f"\n🔧 EDGE FIX: Applied {PIXEL_BUFFER}px buffer to clip polygon")
+                
+                # Create polygon patch for clipping with buffered coordinates
+                polygon_patch = MplPolygon(buffered_coords, closed=True, transform=ax.transData)
                 im.set_clip_path(polygon_patch)
                 
                 print(f"\n✂️  CLIPPING METHOD: matplotlib set_clip_path()")
