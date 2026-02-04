@@ -1,9 +1,11 @@
 """
-FastAPI server for Sentinel-2 Vegetation Indices Calculation
+FastAPI server for Sentinel-2 Vegetation Indices Calculation (GEE Version)
 
 Endpoints:
 - POST /api/v1/calculate-indices - Calculate vegetation indices for a polygon
 - GET /health - Health check
+
+Data Source: Google Earth Engine (COPERNICUS/S2_SR_HARMONIZED)
 """
 import sys
 import os
@@ -27,12 +29,14 @@ from app.schemas import (
     ErrorResponse, 
     HealthResponse
 )
-from script import FarmVisionModelService
+# Import GEE version instead of STAC version
+from script_gee import FarmVisionModelService
 
 # Create FastAPI app
 app = FastAPI(
-    title="Sentinel-2 Vegetation Indices API",
-    description="Calculate vegetation indices (NDVI, GNDVI, EVI, NDMI, NDRE, MSAVI) from Sentinel-2 satellite data",
+    title="Sentinel-2 Vegetation Indices API (GEE)",
+    description="Calculate vegetation indices (NDVI, GNDVI, EVI, NDMI, NDRE, MSAVI) from Sentinel-2 via Google Earth Engine",
+
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
