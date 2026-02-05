@@ -86,17 +86,13 @@ def get_color_scale(index_name):
     return scales.get(index_name, scales['NDVI'])
 
 
-def generate_index_png(index_array, polygon_gdf, output_path, index_name, pixel_scale=100):
+def generate_index_png(index_array, polygon_gdf, output_path, index_name, pixel_scale=100, actual_bounds=None):
     """
-    Generate a PNG image for a vegetation index
+    Generate a PNG image for a vegetation index.
+    Matches the original script.py implementation with proper clipping.
+    """
+    from matplotlib.patches import Polygon as MplPolygon
     
-    Args:
-        index_array: numpy array of index values (already scaled 0-1)
-        polygon_gdf: GeoDataFrame with polygon for clipping
-        output_path: Path to save PNG
-        index_name: Name of index for color scale
-        pixel_scale: Upscaling factor
-    """
     # Scale to -10000 to 10000 range
     INDEX = index_array * 10000
     INDEX = np.around(INDEX, 2)
@@ -108,26 +104,27 @@ def generate_index_png(index_array, polygon_gdf, output_path, index_name, pixel_
     
     # Upsample for smoother output
     INDEX_scaled = zoom(INDEX, pixel_scale, order=1)
+    img_h, img_w = INDEX_scaled.shape
     
     print(f"--- {index_name} - Original: {INDEX.shape}, Upscaled: {INDEX_scaled.shape}")
     
     # Create figure
     fig, ax = plt.subplots()
-    cmap.set_bad(color='none') # Make NaN transparent
+    cmap.set_bad(color='none')  # Make NaN transparent
     im = ax.imshow(INDEX_scaled, cmap=cmap, norm=norm, interpolation='bilinear')
     
-    # Get polygon for clipping
-    img_h, img_w = INDEX_scaled.shape
-    
+    # Clip to polygon shape
     if polygon_gdf is not None and len(polygon_gdf) > 0:
-        poly_coords = polygon_gdf.iloc[0]['geometry']
+        poly_geom = polygon_gdf.iloc[0]['geometry']
         
-        if hasattr(poly_coords, 'exterior'):
-            # Get bounds
-            bounds = polygon_gdf.total_bounds
-            minx, miny, maxx, maxy = bounds
+        if hasattr(poly_geom, 'exterior'):
+            # Use actual GEE bounds for coordinate mapping
+            if actual_bounds:
+                minx, miny, maxx, maxy = actual_bounds['minx'], actual_bounds['miny'], actual_bounds['maxx'], actual_bounds['maxy']
+            else:
+                minx, miny, maxx, maxy = polygon_gdf.total_bounds
             
-            coords = list(poly_coords.exterior.coords)
+            coords = list(poly_geom.exterior.coords)
             scaled_coords = []
             
             for x, y in coords:
@@ -135,7 +132,7 @@ def generate_index_png(index_array, polygon_gdf, output_path, index_name, pixel_
                 py = img_h - (y - miny) / (maxy - miny) * img_h
                 scaled_coords.append([px, py])
             
-            # Apply buffer to prevent edge cutting
+            # Apply buffer to prevent edge pixel cutting (original approach)
             PIXEL_BUFFER = 2
             centroid_x = sum(c[0] for c in scaled_coords) / len(scaled_coords)
             centroid_y = sum(c[1] for c in scaled_coords) / len(scaled_coords)
@@ -150,6 +147,7 @@ def generate_index_png(index_array, polygon_gdf, output_path, index_name, pixel_
                     py += (dy / dist) * PIXEL_BUFFER
                 buffered_coords.append([px, py])
             
+            # Create polygon patch for clipping
             polygon_patch = MplPolygon(buffered_coords, closed=True, transform=ax.transData)
             im.set_clip_path(polygon_patch)
     
@@ -157,7 +155,7 @@ def generate_index_png(index_array, polygon_gdf, output_path, index_name, pixel_
     plt.savefig(output_path, bbox_inches='tight', pad_inches=0.05, transparent=True, dpi=150)
     plt.close(fig)
     
-    print(f"💾 Saved: {output_path}")
+    print(f"Saved: {output_path}")
     return output_path
 
 
@@ -262,27 +260,30 @@ class FarmVisionModelServiceGEE:
             
             for idx_name in indices:
                 idx_lower = idx_name.lower()
-                if idx_name in current_data:
+                # Access bands from the structured data
+                bands_data = current_data.get('bands', current_data)
+                bounds_data = current_data.get('bounds', None)
+                
+                if idx_name in bands_data:
                     # Generate filename
                     png_filename = f"{AppNo}_{date_str}_{idx_lower}.png"
                     png_path = os.path.join(PNG_PATH, png_filename)
                     
                     # Get index data
-                    arr = current_data[idx_name]
+                    arr = bands_data[idx_name]
                     
                     # Apply cloud mask if available for PNG generation
-                    if 'cloudMask' in current_data:
-                        # Mask out clouds (where cloudMask != 1)
-                        # We use np.nan to make it transparent in the final PNG
-                        arr = np.where(current_data['cloudMask'] == 1, arr, np.nan)
+                    if 'cloudMask' in bands_data:
+                        arr = np.where(bands_data['cloudMask'] == 1, arr, np.nan)
                     
-                    # Generate PNG
+                    # Generate PNG with actual bounds
                     generate_index_png(
                         index_array=arr,
                         polygon_gdf=farm_polygon,
                         output_path=png_path,
                         index_name=idx_name,
-                        pixel_scale=5 # Reduced for memory safety
+                        pixel_scale=20,  # Higher for smoother edges
+                        actual_bounds=bounds_data
                     )
                     
                     # Upload to server

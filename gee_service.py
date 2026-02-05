@@ -232,28 +232,47 @@ class GEEService:
         image: ee.Image,
         geometry: ee.Geometry,
         scale: int = 10
-    ) -> Dict[str, np.ndarray]:
+    ) -> tuple:
         """
         Sample image data as numpy arrays within a rectangle
         
-        Args:
-            image: Earth Engine image with indices
-            geometry: Region to sample
-            scale: Resolution in meters
-            
         Returns:
-            Dictionary of band_name -> numpy array
+            Tuple of (data_dict, bounds_dict) where bounds_dict has minx, miny, maxx, maxy
         """
         # Get the bounding box
         bounds = geometry.bounds()
+        
+        # Get bounds coordinates for return
+        bounds_info = bounds.getInfo()
+        coords = bounds_info['coordinates'][0]
+        lons = [c[0] for c in coords]
+        lats = [c[1] for c in coords]
+        
+        # Add 5% buffer to each side to prevent polygon touching frame edges
+        lon_range = max(lons) - min(lons)
+        lat_range = max(lats) - min(lats)
+        buffer_pct = 0.05
+        
+        bounds_dict = {
+            'minx': min(lons) - lon_range * buffer_pct, 
+            'miny': min(lats) - lat_range * buffer_pct, 
+            'maxx': max(lons) + lon_range * buffer_pct, 
+            'maxy': max(lats) + lat_range * buffer_pct
+        }
+        
+        # Create buffered region for sampling
+        buffered_bounds = ee.Geometry.Rectangle([
+            bounds_dict['minx'], bounds_dict['miny'],
+            bounds_dict['maxx'], bounds_dict['maxy']
+        ])
         
         # Sample the region
         bands_to_sample = ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'cloudMask']
         
         try:
-            # Use sampleRectangle for small regions
+            # Use sampleRectangle for small regions with buffered bounds for padding
             sample = image.select(bands_to_sample).sampleRectangle(
-                region=bounds,
+                region=buffered_bounds,
                 defaultValue=0
             )
             
@@ -262,7 +281,7 @@ class GEEService:
                 arr = np.array(sample.get(band).getInfo())
                 result[band] = arr
                 
-            return result
+            return result, bounds_dict
             
         except Exception as e:
             print(f"sampleRectangle failed, using getDownloadURL: {e}")
@@ -367,8 +386,8 @@ class GEEService:
             try:
                 image = ee.Image(image_list.get(i))
                 
-                # Sample the data
-                data = cls.sample_rectangle(image, ee_geometry, scale=10)
+                # Sample the data - returns (data_dict, bounds_dict)
+                data, bounds = cls.sample_rectangle(image, ee_geometry, scale=10)
                 
                 if not data:
                     print(f"No data for image {info['date']}")
@@ -377,26 +396,25 @@ class GEEService:
                 results['dates'].append(info['date'])
                 results['cloud_cover'].append(info['cloud_cover'])
                 
-                # Store data for PNG generation if needed
-                results['image_data'].append(data)
+                # Store data with bounds for PNG generation
+                results['image_data'].append({
+                    'bands': data,
+                    'bounds': bounds
+                })
                 
                 # Calculate median values for each index
                 for idx in indices:
                     if idx in data:
                         arr = data[idx]
                         # Apply cloud mask if available
-                        mask_applied = False
                         if 'cloudMask' in data:
                             mask = data['cloudMask']
-                            # Some GEE implementations return mask as 0/1 int
                             arr = np.where(mask == 1, arr, np.nan)
-                            mask_applied = True
                         
                         # Calculate median
                         if np.all(np.isnan(arr)):
                             median_val = 0
                         else:
-                            # Use nanmedian and handle potentially empty slice
                             val = np.nanmedian(arr)
                             if np.isnan(val):
                                 median_val = 0
