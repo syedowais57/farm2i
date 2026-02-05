@@ -81,6 +81,18 @@ def get_color_scale(index_name):
         'EVI': {
             'bounds': [-10000, -1000, 0, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000],
             'colors': ['#8B0000', '#CD5C5C', '#FFA500', '#FFD700', '#ADFF2F', '#7CFC00', '#32CD32', '#228B22', '#006400', '#004d00']
+        },
+        'RECI': {
+            'bounds': [-10000, 0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 10000],
+            'colors': ['#8B4513', '#CD853F', '#DEB887', '#F0E68C', '#ADFF2F', '#7CFC00', '#32CD32', '#228B22', '#006400', '#004d00']
+        },
+        'PSRI': {
+            'bounds': [-10000, -1000, 0, 500, 1000, 1500, 2000, 2500, 3000, 4000, 10000],
+            'colors': ['#006400', '#228B22', '#32CD32', '#ADFF2F', '#FFFF00', '#FFD700', '#FFA500', '#FF8C00', '#FF4500', '#8B0000']
+        },
+        'MCARI': {
+            'bounds': [-10000, 0, 2000, 4000, 6000, 8000, 10000, 12000, 14000, 16000, 20000],
+            'colors': ['#8B0000', '#CD5C5C', '#FF6347', '#FFA500', '#FFD700', '#ADFF2F', '#7CFC00', '#32CD32', '#228B22', '#006400']
         }
     }
     return scales.get(index_name, scales['NDVI'])
@@ -253,7 +265,7 @@ class FarmVisionModelServiceGEE:
         print(f"OK: Found {len(dates)} images")
         
         # Generate PNG files for each date
-        png_urls = {idx.lower(): [] for idx in ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI']}
+        png_urls = {idx.lower(): [] for idx in ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'RECI', 'PSRI', 'MCARI']}
         
         for i, date_str in enumerate(dates):
             current_data = image_data_list[i]
@@ -300,7 +312,7 @@ class FarmVisionModelServiceGEE:
             'cloud': str(cloud_cover),
         }
         
-        for idx in ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI']:
+        for idx in ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'RECI', 'PSRI', 'MCARI']:
             if idx in index_values:
                 result[idx] = str(index_values[idx])
             else:

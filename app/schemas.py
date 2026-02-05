@@ -27,7 +27,7 @@ class IndicesRequest(BaseModel):
     )
     indices: Optional[List[str]] = Field(
         default=None,
-        description="Optional list of specific indices to calculate. Valid values: NDVI, NDMI, MSAVI, NDRE, GNDVI, EVI. If not provided, all indices are calculated."
+        description="Optional list of specific indices to calculate. Valid values: NDVI, NDMI, MSAVI, NDRE, GNDVI, EVI, RECI, PSRI, MCARI. If not provided, all indices are calculated."
     )
     padding_meters: Optional[int] = Field(
         default=10,
@@ -62,6 +62,9 @@ class IndicesData(BaseModel):
     NDMI: List[int] = Field(default=[], description="NDMI values")
     NDRE: List[int] = Field(default=[], description="NDRE values")
     MSAVI: List[int] = Field(default=[], description="MSAVI values")
+    RECI: List[int] = Field(default=[], description="RECI values")
+    PSRI: List[int] = Field(default=[], description="PSRI values")
+    MCARI: List[int] = Field(default=[], description="MCARI values")
 
 
 class OutputPaths(BaseModel):
@@ -72,6 +75,9 @@ class OutputPaths(BaseModel):
     png_ndmi: List[str] = []
     png_ndre: List[str] = []
     png_msavi: List[str] = []
+    png_reci: List[str] = []
+    png_psri: List[str] = []
+    png_mcari: List[str] = []
 
 
 class IndicesResponse(BaseModel):

@@ -198,6 +198,44 @@ class GEEService:
         ).divide(2).rename('MSAVI')
         
         return image.addBands(msavi)
+
+    @classmethod
+    def calculate_reci(cls, image: ee.Image) -> ee.Image:
+        """Calculate RECI: (NIR / RE1) - 1"""
+        reci = image.expression(
+            '(NIR / RE1) - 1',
+            {
+                'NIR': image.select('B8'),
+                'RE1': image.select('B5')
+            }
+        ).rename('RECI')
+        return image.addBands(reci)
+
+    @classmethod
+    def calculate_psri(cls, image: ee.Image) -> ee.Image:
+        """Calculate PSRI: (Red - Blue) / RE2"""
+        psri = image.expression(
+            '(RED - BLUE) / RE2',
+            {
+                'RED': image.select('B4'),
+                'BLUE': image.select('B2'),
+                'RE2': image.select('B6')
+            }
+        ).rename('PSRI')
+        return image.addBands(psri)
+
+    @classmethod
+    def calculate_mcari(cls, image: ee.Image) -> ee.Image:
+        """Calculate MCARI: ((RE1 - Red) - 0.2*(RE1 - Green)) * (RE1 / Red)"""
+        mcari = image.expression(
+            '((RE1 - RED) - 0.2 * (RE1 - GREEN)) * (RE1 / RED)',
+            {
+                'RE1': image.select('B5'),
+                'RED': image.select('B4'),
+                'GREEN': image.select('B3')
+            }
+        ).rename('MCARI')
+        return image.addBands(mcari)
     
     @classmethod
     def add_all_indices(cls, image: ee.Image) -> ee.Image:
@@ -209,6 +247,9 @@ class GEEService:
         image = cls.calculate_ndmi(image)
         image = cls.calculate_ndre(image)
         image = cls.calculate_msavi(image)
+        image = cls.calculate_reci(image)
+        image = cls.calculate_psri(image)
+        image = cls.calculate_mcari(image)
         return image
     
     @classmethod
@@ -267,7 +308,7 @@ class GEEService:
         ])
         
         # Sample the region
-        bands_to_sample = ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'cloudMask']
+        bands_to_sample = ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'RECI', 'PSRI', 'MCARI', 'cloudMask']
         
         try:
             # Use sampleRectangle for small regions with buffered bounds for padding

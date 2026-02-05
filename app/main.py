@@ -121,7 +121,7 @@ async def calculate_indices(request: IndicesRequest):
         temp_path = './image_data/'
         
         # Validate and prepare indices list
-        valid_indices = {'NDVI', 'NDMI', 'MSAVI', 'NDRE', 'GNDVI', 'EVI'}
+        valid_indices = {'NDVI', 'NDMI', 'MSAVI', 'NDRE', 'GNDVI', 'EVI', 'RECI', 'PSRI', 'MCARI'}
         requested_indices = request.indices
         
         if requested_indices:
@@ -177,7 +177,10 @@ async def calculate_indices(request: IndicesRequest):
                 EVI=parse_list(result.get('EVI', [])),
                 NDMI=parse_list(result.get('NDMI', [])),
                 NDRE=parse_list(result.get('NDRE', [])),
-                MSAVI=parse_list(result.get('MSAVI', []))
+                MSAVI=parse_list(result.get('MSAVI', [])),
+                RECI=parse_list(result.get('RECI', [])),
+                PSRI=parse_list(result.get('PSRI', [])),
+                MCARI=parse_list(result.get('MCARI', []))
             ),
             output_paths=OutputPaths(
                 png_ndvi=result.get('png_ndvi', []),
@@ -185,7 +188,10 @@ async def calculate_indices(request: IndicesRequest):
                 png_evi=result.get('png_evi', []),
                 png_ndmi=result.get('png_ndmi', []),
                 png_ndre=result.get('png_ndre', []),
-                png_msavi=result.get('png_msavi', [])
+                png_msavi=result.get('png_msavi', []),
+                png_reci=result.get('png_reci', []),
+                png_psri=result.get('png_psri', []),
+                png_mcari=result.get('png_mcari', [])
             ),
             message=f"Successfully calculated indices for {len(dates)} dates"
         )
