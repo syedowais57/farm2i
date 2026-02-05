@@ -13,11 +13,14 @@ import uuid
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+import matplotlib
+matplotlib.use('Agg')  # Set backend BEFORE importing pyplot
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, BoundaryNorm
 from matplotlib.patches import Polygon as MplPolygon
 from scipy.ndimage import zoom
 import warnings
+import concurrent.futures
 import requests
 
 from gee_service import GEEService
@@ -175,7 +178,7 @@ class FarmVisionModelServiceGEE:
     """GEE-based Farm Vision Model Service"""
     
     @staticmethod
-    def calculateINDEXService(start_date, end_date, ApplNo, poly, temp, indices=None, padding_meters=10):
+    def calculateINDEXService(start_date, end_date, ApplNo, poly, temp, indices=None, padding_meters=10, max_cloud_cover=100):
         """
         Calculate vegetation indices using Google Earth Engine
         
@@ -217,6 +220,7 @@ class FarmVisionModelServiceGEE:
         print(f"   Date Range: {start_date} to {end_date}")
         print(f"   Indices: {indices}")
         print(f"   Padding: {padding_meters}m")
+        print(f"   Max Cloud Cover: {max_cloud_cover}%")
 
         # Log polygon for debugging (matching STAC version behavior)
         try:
@@ -244,7 +248,8 @@ class FarmVisionModelServiceGEE:
                 start_date=start_date,
                 end_date=end_date,
                 indices=indices,
-                padding_meters=padding_meters
+                padding_meters=padding_meters,
+                max_cloud_cover=max_cloud_cover
             )
         except Exception as e:
             print(f"❌ GEE processing failed: {e}")
@@ -264,47 +269,59 @@ class FarmVisionModelServiceGEE:
         
         print(f"OK: Found {len(dates)} images")
         
-        # Generate PNG files for each date
-        png_urls = {idx.lower(): [] for idx in ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'RECI', 'PSRI', 'MCARI']}
-        
+        # Parallelize PNG generation and uploads
+        tasks = []
         for i, date_str in enumerate(dates):
             current_data = image_data_list[i]
+            bands_data = current_data.get('bands', current_data)
+            bounds_data = current_data.get('bounds', None)
             
             for idx_name in indices:
-                idx_lower = idx_name.lower()
-                # Access bands from the structured data
-                bands_data = current_data.get('bands', current_data)
-                bounds_data = current_data.get('bounds', None)
-                
                 if idx_name in bands_data:
-                    # Generate filename
-                    png_filename = f"{AppNo}_{date_str}_{idx_lower}.png"
-                    png_path = os.path.join(PNG_PATH, png_filename)
-                    
-                    # Get index data
-                    arr = bands_data[idx_name]
-                    
-                    # Apply cloud mask if available for PNG generation
-                    if 'cloudMask' in bands_data:
-                        arr = np.where(bands_data['cloudMask'] == 1, arr, np.nan)
-                    
-                    # Generate PNG with actual bounds
-                    generate_index_png(
-                        index_array=arr,
-                        polygon_gdf=farm_polygon,
-                        output_path=png_path,
-                        index_name=idx_name,
-                        pixel_scale=20,  # Higher for smoother edges
-                        actual_bounds=bounds_data
-                    )
-                    
-                    # Upload to server
-                    url = upload_to_server(png_path, AppNo, idx_lower, date_str)
-                    if url:
-                        png_urls[idx_lower].append(url)
-                    else:
-                        # Fallback to local path if upload fails
-                        png_urls[idx_lower].append(png_path)
+                    tasks.append({
+                        'arr': bands_data[idx_name],
+                        'cloud_mask': bands_data.get('cloudMask'),
+                        'date_str': date_str,
+                        'idx_name': idx_name,
+                        'bounds_data': bounds_data,
+                        'AppNo': AppNo,
+                        'farm_polygon': farm_polygon
+                    })
+
+        # Initialize PNG URL storage
+        png_urls = {idx.lower(): [] for idx in ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'RECI', 'PSRI', 'MCARI']}
+
+        def process_single_index(task):
+            idx_lower = task['idx_name'].lower()
+            png_filename = f"{task['AppNo']}_{task['date_str']}_{idx_lower}.png"
+            png_path = os.path.join(PNG_PATH, png_filename)
+            
+            arr = task['arr']
+            if task['cloud_mask'] is not None:
+                arr = np.where(task['cloud_mask'] == 1, arr, np.nan)
+            
+            # Generate PNG (rendering is CPU intensive)
+            generate_index_png(
+                index_array=arr,
+                polygon_gdf=task['farm_polygon'],
+                output_path=png_path,
+                index_name=task['idx_name'],
+                pixel_scale=20,
+                actual_bounds=task['bounds_data']
+            )
+            
+            # Upload to server (I/O intensive)
+            url = upload_to_server(png_path, task['AppNo'], idx_lower, task['date_str'])
+            return idx_lower, url or png_path
+
+        print(f"Processing {len(tasks)} index maps in parallel...")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            render_results = list(executor.map(process_single_index, tasks))
+
+        # Organize results back into png_urls
+        for idx_lower, url in render_results:
+            if idx_lower in png_urls:
+                png_urls[idx_lower].append(url)
         
         # Build result dictionary in same format as STAC version
         result = {
@@ -312,13 +329,14 @@ class FarmVisionModelServiceGEE:
             'cloud': str(cloud_cover),
         }
         
+        # Add index median values and PNG paths to result
         for idx in ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'RECI', 'PSRI', 'MCARI']:
             if idx in index_values:
                 result[idx] = str(index_values[idx])
             else:
                 result[idx] = '[]'
             
-            # Add PNG paths (ensure they map to the lowercase index names for the API)
+            # Add PNG paths
             result[f'png_{idx.lower()}'] = png_urls.get(idx.lower(), [])
         
         processing_time = round((time.time() - start_time) / 60, 2)

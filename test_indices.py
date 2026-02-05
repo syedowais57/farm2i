@@ -10,9 +10,10 @@ data = {
         {"lat": 34.02524399030139, "lng": 74.81332091484}
     ],
     "start_date": "2025-05-01",
-    "end_date": "2025-05-02",
-    "field_id": "testing_all_indices_one_date",
-    "indices": None  # None/null calculates all indices
+    "end_date": "2025-05-15",
+    "field_id": "testing_cloud_filter",
+    "indices": ["NDVI"],
+    "max_cloud_cover": 30
 }
 
 try:

@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 import json
 import os
+import concurrent.futures
 
 
 # Path to service account key file
@@ -363,7 +364,8 @@ class GEEService:
         start_date: str,
         end_date: str,
         indices: List[str] = None,
-        padding_meters: int = 10
+        padding_meters: int = 10,
+        max_cloud_cover: int = 100
     ) -> Dict:
         """
         Main processing function - equivalent to STAC version
@@ -392,7 +394,7 @@ class GEEService:
         
         # Get image collection
         collection = cls.get_sentinel2_collection(
-            ee_geometry_buffered, start_date, end_date
+            ee_geometry_buffered, start_date, end_date, max_cloud_cover
         )
         
         # Add indices to all images
@@ -421,59 +423,64 @@ class GEEService:
         
         image_list = collection_with_indices.toList(collection_with_indices.size())
         
-        for i, info in enumerate(image_info):
-            print(f"Processing image {i+1}/{len(image_info)}: {info['date']}")
-            
+        def fetch_image_data(i):
+            info = image_info[i]
             try:
                 image = ee.Image(image_list.get(i))
-                
-                # Sample the data - returns (data_dict, bounds_dict)
                 data, bounds = cls.sample_rectangle(image, ee_geometry, scale=10)
-                
                 if not data:
-                    print(f"No data for image {info['date']}")
-                    continue
+                    return None
                 
-                results['dates'].append(info['date'])
-                results['cloud_cover'].append(info['cloud_cover'])
-                
-                # Store data with bounds for PNG generation
-                results['image_data'].append({
-                    'bands': data,
-                    'bounds': bounds
-                })
-                
-                # Calculate median values for each index
+                # Pre-calculate median values for each index
+                median_results = {}
                 for idx in indices:
                     if idx in data:
                         arr = data[idx]
-                        # Apply cloud mask if available
                         if 'cloudMask' in data:
                             mask = data['cloudMask']
                             arr = np.where(mask == 1, arr, np.nan)
                         
-                        # Calculate median
                         if np.all(np.isnan(arr)):
-                            median_val = 0
+                            median_results[idx] = 0
                         else:
                             val = np.nanmedian(arr)
-                            if np.isnan(val):
-                                median_val = 0
-                            else:
-                                median_val = int(val * 10000)
-                                
-                        results['indices'][idx].append(median_val)
+                            median_results[idx] = int(val * 10000) if not np.isnan(val) else 0
                     else:
-                        results['indices'][idx].append(0)
-                        
+                        median_results[idx] = 0
+                
+                return {
+                    'date': info['date'],
+                    'cloud_cover': info['cloud_cover'],
+                    'image_data': {
+                        'bands': data,
+                        'bounds': bounds
+                    },
+                    'indices': median_results
+                }
             except Exception as e:
-                print(f"Error processing image {info['date']}: {e}")
-                # Ensure we don't have mismatched list lengths
-                if len(results['dates']) > len(results['indices'][indices[0]]):
-                    results['dates'].pop()
-                    results['cloud_cover'].pop()
-                continue
+                print(f"Error fetching data for {info['date']}: {e}")
+                return None
+
+        print(f"Fetching data for {len(image_info)} images in parallel...")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_index = {executor.submit(fetch_image_data, i): i for i in range(len(image_info))}
+            
+            parallel_results = []
+            for future in concurrent.futures.as_completed(future_to_index):
+                res = future.result()
+                if res:
+                    parallel_results.append(res)
         
+        # Sort results by date to maintain chronological order
+        parallel_results.sort(key=lambda x: x['date'])
+        
+        for res in parallel_results:
+            results['dates'].append(res['date'])
+            results['cloud_cover'].append(res['cloud_cover'])
+            results['image_data'].append(res['image_data'])
+            for idx in indices:
+                results['indices'][idx].append(res['indices'].get(idx, 0))
+
         return results
 
 

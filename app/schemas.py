@@ -33,6 +33,10 @@ class IndicesRequest(BaseModel):
         default=10,
         description="Padding in meters around the polygon for fetching satellite data. Higher values fetch more surrounding context. Default: 10 meters."
     )
+    max_cloud_cover: Optional[int] = Field(
+        default=100,
+        description="Maximum cloud cover percentage allowed (0-100). Images exceeding this value will be filtered out. Default: 100."
+    )
 
     model_config = {
         "json_schema_extra": {
