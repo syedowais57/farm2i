@@ -249,6 +249,14 @@ class GEEService:
         return image.addBands(mcari)
     
     @classmethod
+    def calculate_oc(cls, image: ee.Image) -> ee.Image:
+        """Calculate OC (Organic Carbon): 3.591 * NDVI"""
+        # Ensure NDVI is already calculated and available
+        ndvi = image.select('NDVI')
+        oc = ndvi.multiply(3.591).rename('OC')
+        return image.addBands(oc)
+    
+    @classmethod
     def add_all_indices(cls, image: ee.Image) -> ee.Image:
         """Add all vegetation indices to an image"""
         image = cls.add_cloud_mask(image)
@@ -261,6 +269,7 @@ class GEEService:
         image = cls.calculate_reci(image)
         image = cls.calculate_psri(image)
         image = cls.calculate_mcari(image)
+        image = cls.calculate_oc(image)
         return image
     
     @classmethod
@@ -319,7 +328,7 @@ class GEEService:
         ])
         
         # Sample the region
-        bands_to_sample = ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'RECI', 'PSRI', 'MCARI', 'cloudMask']
+        bands_to_sample = ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'RECI', 'PSRI', 'MCARI', 'OC', 'cloudMask']
         
         try:
             # Use sampleRectangle for small regions with buffered bounds for padding

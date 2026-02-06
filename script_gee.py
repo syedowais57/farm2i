@@ -96,6 +96,10 @@ def get_color_scale(index_name):
         'MCARI': {
             'bounds': [-10000, 0, 2000, 4000, 6000, 8000, 10000, 12000, 14000, 16000, 20000],
             'colors': ['#8B0000', '#CD5C5C', '#FF6347', '#FFA500', '#FFD700', '#ADFF2F', '#7CFC00', '#32CD32', '#228B22', '#006400']
+        },
+        'OC': {
+            'bounds': [-30000, 0, 5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 50000],
+            'colors': ['#5D4037', '#8D6E63', '#FFCC80', '#FFE082', '#E6EE9C', '#D4E157', '#AED581', '#8BC34A', '#4CAF50', '#2E7D32']
         }
     }
     return scales.get(index_name, scales['NDVI'])
@@ -210,7 +214,7 @@ class FarmVisionModelServiceGEE:
         
         # Default indices
         if indices is None:
-            indices = ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI']
+            indices = ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'OC']
         
         AppNo = str(ApplNo)
         
@@ -291,7 +295,7 @@ class FarmVisionModelServiceGEE:
                     })
 
         # Initialize PNG URL storage
-        png_urls = {idx.lower(): [] for idx in ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'RECI', 'PSRI', 'MCARI']}
+        png_urls = {idx.lower(): [] for idx in ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'RECI', 'PSRI', 'MCARI', 'OC']}
 
         def process_single_index(task):
             idx_lower = task['idx_name'].lower()

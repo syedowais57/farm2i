@@ -98,6 +98,7 @@ async def calculate_indices(request: IndicesRequest):
     - **NDMI**: Normalized Difference Moisture Index
     - **NDRE**: Normalized Difference Red Edge Index
     - **MSAVI**: Modified Soil Adjusted Vegetation Index
+    - **OC**: Organic Carbon Index (Formula: 3.591 * NDVI)
     
     **Note**: Processing takes approximately 10-15 minutes depending on the date range.
     """
@@ -121,7 +122,7 @@ async def calculate_indices(request: IndicesRequest):
         temp_path = './image_data/'
         
         # Validate and prepare indices list
-        valid_indices = {'NDVI', 'NDMI', 'MSAVI', 'NDRE', 'GNDVI', 'EVI', 'RECI', 'PSRI', 'MCARI'}
+        valid_indices = {'NDVI', 'NDMI', 'MSAVI', 'NDRE', 'GNDVI', 'EVI', 'RECI', 'PSRI', 'MCARI', 'OC'}
         requested_indices = request.indices
         
         if requested_indices:
@@ -181,7 +182,8 @@ async def calculate_indices(request: IndicesRequest):
                 MSAVI=parse_list(result.get('MSAVI', [])),
                 RECI=parse_list(result.get('RECI', [])),
                 PSRI=parse_list(result.get('PSRI', [])),
-                MCARI=parse_list(result.get('MCARI', []))
+                MCARI=parse_list(result.get('MCARI', [])),
+                OC=parse_list(result.get('OC', []))
             ),
             output_paths=OutputPaths(
                 png_ndvi=result.get('png_ndvi', []),
@@ -192,7 +194,8 @@ async def calculate_indices(request: IndicesRequest):
                 png_msavi=result.get('png_msavi', []),
                 png_reci=result.get('png_reci', []),
                 png_psri=result.get('png_psri', []),
-                png_mcari=result.get('png_mcari', [])
+                png_mcari=result.get('png_mcari', []),
+                png_oc=result.get('png_oc', [])
             ),
             message=f"Successfully calculated indices for {len(dates)} dates"
         )
