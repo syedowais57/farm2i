@@ -9,11 +9,11 @@ data = {
         {"lat": 34.02541293744765, "lng": 74.8139038482608},
         {"lat": 34.02524399030139, "lng": 74.81332091484}
     ],
-    "start_date": "2025-05-01",
-    "end_date": "2025-05-15",
-    "field_id": "testing_cloud_filter",
+    "start_date": "2025-07-01",
+    "end_date": "2025-07-10",
+    "field_id": "testing_scl_fix",
     "indices": ["NDVI"],
-    "max_cloud_cover": 30
+    "max_cloud_cover": 50
 }
 
 try:

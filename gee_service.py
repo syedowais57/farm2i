@@ -117,12 +117,22 @@ class GEEService:
             # Select 10m bands to get target projection/scale
             projection = image.select('B2').projection()
             
-            # Resample all bands to 10m using bicubic interpolation
-            return image.resample('bicubic').reproject(
+            # Separate SCL band (categorical) - use nearest neighbor to preserve class values
+            scl = image.select('SCL').resample('bilinear').reproject(
+                crs=projection.crs(),
+                scale=10
+            ).round().toInt()  # Round to nearest integer to keep categorical values
+            
+            # Resample all other bands to 10m using bicubic interpolation
+            other_bands = image.bandNames().filter(ee.Filter.neq('item', 'SCL'))
+            resampled = image.select(other_bands).resample('bicubic').reproject(
                 crs=projection.crs(),
                 scale=10
             )
-
+            
+            # Combine: resampled bands + properly handled SCL
+            return resampled.addBands(scl)
+        
         collection = (
             ee.ImageCollection(cls.COLLECTION)
             .filterBounds(geometry)

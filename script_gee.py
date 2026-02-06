@@ -135,7 +135,8 @@ def generate_index_png(index_array, polygon_gdf, output_path, index_name, pixel_
         if hasattr(poly_geom, 'exterior'):
             # Use actual GEE bounds for coordinate mapping
             if actual_bounds:
-                minx, miny, maxx, maxy = actual_bounds['minx'], actual_bounds['miny'], actual_bounds['maxx'], actual_bounds['maxy']
+                minx, miny = actual_bounds['minx'], actual_bounds['miny']
+                maxx, maxy = actual_bounds['maxx'], actual_bounds['maxy']
             else:
                 minx, miny, maxx, maxy = polygon_gdf.total_bounds
             
@@ -143,11 +144,12 @@ def generate_index_png(index_array, polygon_gdf, output_path, index_name, pixel_
             scaled_coords = []
             
             for x, y in coords:
+                # Scale polygon coordinates to image pixel coordinates
                 px = (x - minx) / (maxx - minx) * img_w
                 py = img_h - (y - miny) / (maxy - miny) * img_h
                 scaled_coords.append([px, py])
             
-            # Apply buffer to prevent edge pixel cutting (original approach)
+            # Apply a small buffer to prevent edge pixel cutting
             PIXEL_BUFFER = 2
             centroid_x = sum(c[0] for c in scaled_coords) / len(scaled_coords)
             centroid_y = sum(c[1] for c in scaled_coords) / len(scaled_coords)
@@ -213,7 +215,7 @@ class FarmVisionModelServiceGEE:
         AppNo = str(ApplNo)
         
         # Create GeoDataFrame
-        farm_polygon = gpd.GeoDataFrame([poly], columns=['geometry'], crs='epsg:4326')
+        farm_polygon = gpd.GeoDataFrame({'geometry': [poly]}, crs='epsg:4326')
         
         print(f"\nGEE PROCESSING:")
         print(f"   Field ID: {AppNo}")
@@ -314,9 +316,10 @@ class FarmVisionModelServiceGEE:
             url = upload_to_server(png_path, task['AppNo'], idx_lower, task['date_str'])
             return idx_lower, url or png_path
 
-        print(f"Processing {len(tasks)} index maps in parallel...")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-            render_results = list(executor.map(process_single_index, tasks))
+        print(f"Processing {len(tasks)} index maps sequentially...")
+        # NOTE: matplotlib is not fully thread-safe, so process sequentially
+        # Upload parallelization can be added separately if needed
+        render_results = [process_single_index(task) for task in tasks]
 
         # Organize results back into png_urls
         for idx_lower, url in render_results:
