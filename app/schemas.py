@@ -27,7 +27,7 @@ class IndicesRequest(BaseModel):
     )
     indices: Optional[List[str]] = Field(
         default=None,
-        description="Optional list of specific indices to calculate. Valid values: NDVI, NDMI, MSAVI, NDRE, GNDVI, EVI, RECI, PSRI, MCARI, OC. If not provided, all indices are calculated."
+        description="Optional list of specific indices to calculate. Valid values: NDVI, NDMI, MSAVI, NDRE, GNDVI, EVI, RECI, PSRI, MCARI, OC, N_Index, P_Index, K_Index, pH_Index. If not provided, all indices are calculated."
     )
     padding_meters: Optional[int] = Field(
         default=10,
@@ -70,6 +70,10 @@ class IndicesData(BaseModel):
     PSRI: List[int] = Field(default=[], description="PSRI values")
     MCARI: List[int] = Field(default=[], description="MCARI values")
     OC: List[int] = Field(default=[], description="OC values")
+    N_Index: List[int] = Field(default=[], description="Nitrogen Index values")
+    P_Index: List[int] = Field(default=[], description="Phosphorus Index values")
+    K_Index: List[int] = Field(default=[], description="Potassium Index values")
+    pH_Index: List[int] = Field(default=[], description="pH Index values")
 
 
 class OutputPaths(BaseModel):
@@ -84,6 +88,10 @@ class OutputPaths(BaseModel):
     png_psri: List[str] = []
     png_mcari: List[str] = []
     png_oc: List[str] = []
+    png_n_index: List[str] = []
+    png_p_index: List[str] = []
+    png_k_index: List[str] = []
+    png_ph_index: List[str] = []
 
 
 class IndicesResponse(BaseModel):

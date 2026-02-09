@@ -12,7 +12,7 @@ data = {
     "start_date": "2025-07-01",
     "end_date": "2025-07-10",
     "field_id": "testing_scl_fix",
-    "indices": ["NDVI", "OC"],
+    "indices": ["NDVI", "OC", "N_Index", "P_Index", "K_Index", "pH_Index"],
     "max_cloud_cover": 50
 }
 

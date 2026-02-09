@@ -257,6 +257,36 @@ class GEEService:
         return image.addBands(oc)
     
     @classmethod
+    def calculate_n_index(cls, image: ee.Image) -> ee.Image:
+        """Calculate Nitrogen Index: 1.25 * NDRE"""
+        ndre = image.select('NDRE')
+        n_index = ndre.multiply(1.25).rename('N_Index')
+        return image.addBands(n_index)
+    
+    @classmethod
+    def calculate_p_index(cls, image: ee.Image) -> ee.Image:
+        """Calculate Phosphorus Index: 0.48 * OC"""
+        oc = image.select('OC')
+        p_index = oc.multiply(0.48).rename('P_Index')
+        return image.addBands(p_index)
+        
+    @classmethod
+    def calculate_k_index(cls, image: ee.Image) -> ee.Image:
+        """Calculate Potassium Index: 0.78 * NDVI"""
+        ndvi = image.select('NDVI')
+        k_index = ndvi.multiply(0.78).rename('K_Index')
+        return image.addBands(k_index)
+        
+    @classmethod
+    def calculate_ph_index(cls, image: ee.Image) -> ee.Image:
+        """Calculate pH Index: 3.5 + 2.5 * ((B11 - B12) / (B11 + B12))"""
+        swir1 = image.select('B11')
+        swir2 = image.select('B12')
+        ph_ratio = swir1.subtract(swir2).divide(swir1.add(swir2))
+        ph_index = ph_ratio.multiply(2.5).add(3.5).rename('pH_Index')
+        return image.addBands(ph_index)
+    
+    @classmethod
     def add_all_indices(cls, image: ee.Image) -> ee.Image:
         """Add all vegetation indices to an image"""
         image = cls.add_cloud_mask(image)
@@ -270,6 +300,10 @@ class GEEService:
         image = cls.calculate_psri(image)
         image = cls.calculate_mcari(image)
         image = cls.calculate_oc(image)
+        image = cls.calculate_n_index(image)
+        image = cls.calculate_p_index(image)
+        image = cls.calculate_k_index(image)
+        image = cls.calculate_ph_index(image)
         return image
     
     @classmethod
@@ -328,7 +362,12 @@ class GEEService:
         ])
         
         # Sample the region
-        bands_to_sample = ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'RECI', 'PSRI', 'MCARI', 'OC', 'cloudMask']
+        bands_to_sample = [
+            'NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 
+            'RECI', 'PSRI', 'MCARI', 'OC', 
+            'N_Index', 'P_Index', 'K_Index', 'pH_Index',
+            'cloudMask'
+        ]
         
         try:
             # Use sampleRectangle for small regions with buffered bounds for padding
@@ -403,7 +442,11 @@ class GEEService:
         
         # Default to all indices
         if indices is None:
-            indices = ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI']
+            indices = [
+                'NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 
+                'RECI', 'PSRI', 'MCARI', 'OC', 
+                'N_Index', 'P_Index', 'K_Index', 'pH_Index'
+            ]
         
         # Convert polygon to GEE geometry
         ee_geometry = cls.polygon_to_ee_geometry(polygon)

@@ -100,6 +100,22 @@ def get_color_scale(index_name):
         'OC': {
             'bounds': [-30000, 0, 5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 50000],
             'colors': ['#5D4037', '#8D6E63', '#FFCC80', '#FFE082', '#E6EE9C', '#D4E157', '#AED581', '#8BC34A', '#4CAF50', '#2E7D32']
+        },
+        'N_Index': {
+            'bounds': [-10000, 0, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 15000],
+            'colors': ['#8B0000', '#CD5C5C', '#FFD700', '#ADFF2F', '#7CFC00', '#32CD32', '#228B22', '#006400', '#004d00', '#003300']
+        },
+        'P_Index': {
+            'bounds': [-10000, 0, 2000, 4000, 6000, 8000, 10000, 12000, 15000, 20000, 25000],
+            'colors': ['#E3F2FD', '#BBDEFB', '#90CAF9', '#64B5F6', '#42A5F5', '#2196F3', '#1E88E5', '#1976D2', '#1565C0', '#0D47A1']
+        },
+        'K_Index': {
+            'bounds': [-10000, 0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 10000],
+            'colors': ['#F3E5F5', '#E1BEE7', '#CE93D8', '#BA68C8', '#AB47BC', '#9C27B0', '#8E24AA', '#7B1FA2', '#6A1B9A', '#4A148C']
+        },
+        'pH_Index': {
+            'bounds': [0, 40000, 50000, 55000, 60000, 65000, 70000, 75000, 80000, 85000, 140000],
+            'colors': ['#D50000', '#FF1744', '#FF5252', '#FF8A80', '#F1F8E9', '#DCEDC8', '#AED581', '#81C784', '#4CAF50', '#1B5E20']
         }
     }
     return scales.get(index_name, scales['NDVI'])
@@ -214,7 +230,11 @@ class FarmVisionModelServiceGEE:
         
         # Default indices
         if indices is None:
-            indices = ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'OC']
+            indices = [
+                'NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 
+                'RECI', 'PSRI', 'MCARI', 'OC', 
+                'N_Index', 'P_Index', 'K_Index', 'pH_Index'
+            ]
         
         AppNo = str(ApplNo)
         
@@ -260,13 +280,19 @@ class FarmVisionModelServiceGEE:
         except Exception as e:
             print(f"❌ GEE processing failed: {e}")
             return {
-                'dates': '[]',
-                'cloud': '[]',
-                'NDVI': '[]', 'GNDVI': '[]', 'EVI': '[]',
-                'NDMI': '[]', 'NDRE': '[]', 'MSAVI': '[]',
-                'png_ndvi': [], 'png_gndvi': [], 'png_evi': [],
-                'png_ndmi': [], 'png_ndre': [], 'png_msavi': []
-            }
+            'dates': '[]',
+            'cloud': '[]',
+            'NDVI': '[]', 'GNDVI': '[]', 'EVI': '[]',
+            'NDMI': '[]', 'NDRE': '[]', 'MSAVI': '[]',
+            'RECI': '[]', 'PSRI': '[]', 'MCARI': '[]',
+            'OC': '[]', 'N_Index': '[]', 'P_Index': '[]',
+            'K_Index': '[]', 'pH_Index': '[]',
+            'png_ndvi': [], 'png_gndvi': [], 'png_evi': [],
+            'png_ndmi': [], 'png_ndre': [], 'png_msavi': [],
+            'png_reci': [], 'png_psri': [], 'png_mcari': [],
+            'png_oc': [], 'png_n_index': [], 'png_p_index': [],
+            'png_k_index': [], 'png_ph_index': []
+        }
         
         dates = gee_results['dates']
         cloud_cover = gee_results['cloud_cover']
@@ -295,7 +321,12 @@ class FarmVisionModelServiceGEE:
                     })
 
         # Initialize PNG URL storage
-        png_urls = {idx.lower(): [] for idx in ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'RECI', 'PSRI', 'MCARI', 'OC']}
+        all_possible_indices = [
+            'NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 
+            'RECI', 'PSRI', 'MCARI', 'OC', 
+            'N_Index', 'P_Index', 'K_Index', 'pH_Index'
+        ]
+        png_urls = {idx.lower(): [] for idx in all_possible_indices}
 
         def process_single_index(task):
             idx_lower = task['idx_name'].lower()
@@ -337,7 +368,13 @@ class FarmVisionModelServiceGEE:
         }
         
         # Add index median values and PNG paths to result
-        for idx in ['NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 'RECI', 'PSRI', 'MCARI']:
+        all_return_indices = [
+            'NDVI', 'GNDVI', 'EVI', 'NDMI', 'NDRE', 'MSAVI', 
+            'RECI', 'PSRI', 'MCARI', 'OC', 
+            'N_Index', 'P_Index', 'K_Index', 'pH_Index'
+        ]
+        
+        for idx in all_return_indices:
             if idx in index_values:
                 result[idx] = str(index_values[idx])
             else:

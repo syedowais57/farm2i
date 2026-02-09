@@ -99,6 +99,10 @@ async def calculate_indices(request: IndicesRequest):
     - **NDRE**: Normalized Difference Red Edge Index
     - **MSAVI**: Modified Soil Adjusted Vegetation Index
     - **OC**: Organic Carbon Index (Formula: 3.591 * NDVI)
+    - **N_Index**: Nitrogen Index (Proxy for Nitrogen)
+    - **P_Index**: Phosphorus Index (Proxy for Phosphorus)
+    - **K_Index**: Potassium Index (Proxy for Potassium)
+    - **pH_Index**: pH Index (Proxy for Soil pH)
     
     **Note**: Processing takes approximately 10-15 minutes depending on the date range.
     """
@@ -122,7 +126,11 @@ async def calculate_indices(request: IndicesRequest):
         temp_path = './image_data/'
         
         # Validate and prepare indices list
-        valid_indices = {'NDVI', 'NDMI', 'MSAVI', 'NDRE', 'GNDVI', 'EVI', 'RECI', 'PSRI', 'MCARI', 'OC'}
+        valid_indices = {
+            'NDVI', 'NDMI', 'MSAVI', 'NDRE', 'GNDVI', 'EVI', 
+            'RECI', 'PSRI', 'MCARI', 'OC', 
+            'N_Index', 'P_Index', 'K_Index', 'pH_Index'
+        }
         requested_indices = request.indices
         
         if requested_indices:
@@ -183,7 +191,11 @@ async def calculate_indices(request: IndicesRequest):
                 RECI=parse_list(result.get('RECI', [])),
                 PSRI=parse_list(result.get('PSRI', [])),
                 MCARI=parse_list(result.get('MCARI', [])),
-                OC=parse_list(result.get('OC', []))
+                OC=parse_list(result.get('OC', [])),
+                N_Index=parse_list(result.get('N_Index', [])),
+                P_Index=parse_list(result.get('P_Index', [])),
+                K_Index=parse_list(result.get('K_Index', [])),
+                pH_Index=parse_list(result.get('pH_Index', []))
             ),
             output_paths=OutputPaths(
                 png_ndvi=result.get('png_ndvi', []),
@@ -195,7 +207,11 @@ async def calculate_indices(request: IndicesRequest):
                 png_reci=result.get('png_reci', []),
                 png_psri=result.get('png_psri', []),
                 png_mcari=result.get('png_mcari', []),
-                png_oc=result.get('png_oc', [])
+                png_oc=result.get('png_oc', []),
+                png_n_index=result.get('png_n_index', []),
+                png_p_index=result.get('png_p_index', []),
+                png_k_index=result.get('png_k_index', []),
+                png_ph_index=result.get('png_ph_index', [])
             ),
             message=f"Successfully calculated indices for {len(dates)} dates"
         )
