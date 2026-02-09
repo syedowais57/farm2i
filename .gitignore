@@ -32,3 +32,11 @@ line.prj
 # OS
 .DS_Store
 Thumbs.db
+
+# Credentials and Scripts
+*.json
+*original.py
+diag_bounds.py
+uvicorn_debug.log
+*.log
+*.txt
