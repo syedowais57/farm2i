@@ -415,6 +415,39 @@ class GEEService:
             print(f"Error downloading as numpy: {e}")
             return {}
     
+    @staticmethod
+    def select_best_per_month(parallel_results: list) -> list:
+        """
+        From a list of image results, pick the single best image per month.
+        Best = lowest cloud cover. On ties, most recent date wins.
+        
+        Args:
+            parallel_results: List of dicts with 'date' (YYYY-MM-DD) and 'cloud_cover' keys.
+        Returns:
+            Filtered list with at most one entry per year-month, sorted chronologically.
+        """
+        from collections import defaultdict
+        
+        monthly_groups = defaultdict(list)
+        for res in parallel_results:
+            year_month = res['date'][:7]  # 'YYYY-MM'
+            monthly_groups[year_month].append(res)
+        
+        best = []
+        for ym in sorted(monthly_groups.keys()):
+            images = monthly_groups[ym]
+            # Sort: lowest cloud cover first, then most recent date first (descending)
+            images.sort(key=lambda x: (x['cloud_cover'], x['date']))
+            # Pick lowest cloud; among ties, pick the last date (most recent)
+            min_cloud = images[0]['cloud_cover']
+            candidates = [img for img in images if img['cloud_cover'] == min_cloud]
+            # Most recent among candidates
+            candidates.sort(key=lambda x: x['date'], reverse=True)
+            best.append(candidates[0])
+        
+        print(f"   Best-per-month: selected {len(best)} images from {len(parallel_results)} total")
+        return best
+    
     @classmethod
     def process_polygon(
         cls,
@@ -423,7 +456,8 @@ class GEEService:
         end_date: str,
         indices: List[str] = None,
         padding_meters: int = 10,
-        max_cloud_cover: int = 100
+        max_cloud_cover: int = 100,
+        best_per_month: bool = False
     ) -> Dict:
         """
         Main processing function - equivalent to STAC version
@@ -434,6 +468,7 @@ class GEEService:
             end_date: End date (YYYY-MM-DD)
             indices: List of indices to calculate (default: all)
             padding_meters: Buffer around polygon
+            best_per_month: If True, return only the best image per month
             
         Returns:
             Dictionary with dates, cloud cover, and index values
@@ -535,6 +570,10 @@ class GEEService:
         
         # Sort results by date to maintain chronological order
         parallel_results.sort(key=lambda x: x['date'])
+        
+        # Apply best-per-month filtering if requested
+        if best_per_month:
+            parallel_results = cls.select_best_per_month(parallel_results)
         
         for res in parallel_results:
             results['dates'].append(res['date'])
