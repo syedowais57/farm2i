@@ -37,6 +37,10 @@ class IndicesRequest(BaseModel):
         default=100,
         description="Maximum cloud cover percentage allowed (0-100). Images exceeding this value will be filtered out. Default: 100."
     )
+    best_per_month: Optional[bool] = Field(
+        default=False,
+        description="If true, return only the single best image per month (lowest cloud cover, most recent on ties). Ideal for monthly reporting."
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -51,7 +55,8 @@ class IndicesRequest(BaseModel):
                     "start_date": "2025-05-01",
                     "end_date": "2025-05-10",
                     "field_id": "testing_payment",
-                    "indices": ["NDVI", "EVI"]
+                    "indices": ["NDVI", "EVI"],
+                    "best_per_month": True
                 }
             ]
         }

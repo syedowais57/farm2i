@@ -22,8 +22,8 @@ line.shp
 line.shx
 line.dbf
 line.prj
-# *.png
-# *.tif
+*.png
+*.tif
 *.shp
 *.shx
 *.dbf

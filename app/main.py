@@ -154,7 +154,8 @@ async def calculate_indices(request: IndicesRequest):
             temp=temp_path,
             indices=requested_indices,
             padding_meters=request.padding_meters or 10,
-            max_cloud_cover=request.max_cloud_cover or 100
+            max_cloud_cover=request.max_cloud_cover or 100,
+            best_per_month=request.best_per_month or False
         )
         
         # Calculate processing time
