@@ -248,24 +248,24 @@ class FarmVisionModelServiceGEE:
         print(f"   Padding: {padding_meters}m")
         print(f"   Max Cloud Cover: {max_cloud_cover}%")
 
-        # Log polygon for debugging (matching STAC version behavior)
-        try:
-            from matplotlib.patches import Polygon as MplPoly
-            fig_poly, ax_poly = plt.subplots(figsize=(8, 8))
-            # Extract coordinates for the polygon
-            if hasattr(poly, 'exterior'):
-                coords = list(poly.exterior.coords)
-                polygon_patch = MplPoly(coords, fill=True, facecolor='lightgreen', edgecolor='green', linewidth=2)
-                ax_poly.add_patch(polygon_patch)
-                ax_poly.autoscale()
-                ax_poly.set_aspect('equal')
-                ax_poly.set_title(f'Polygon sent to GEE API (Field: {AppNo})')
-                debug_poly_path = os.path.join(PNG_PATH, 'DEBUG_polygon_satellite.png')
-                plt.savefig(debug_poly_path, dpi=150, bbox_inches='tight')
-                plt.close(fig_poly)
-                print(f"Saved: DEBUG_polygon_satellite.png to {PNG_PATH}")
-        except Exception as e:
-            print(f"Warning: Could not save debug polygon: {e}")
+        # Debug polygon image saving - DISABLED for production
+        # try:
+        #     from matplotlib.patches import Polygon as MplPoly
+        #     fig_poly, ax_poly = plt.subplots(figsize=(8, 8))
+        #     # Extract coordinates for the polygon
+        #     if hasattr(poly, 'exterior'):
+        #         coords = list(poly.exterior.coords)
+        #         polygon_patch = MplPoly(coords, fill=True, facecolor='lightgreen', edgecolor='green', linewidth=2)
+        #         ax_poly.add_patch(polygon_patch)
+        #         ax_poly.autoscale()
+        #         ax_poly.set_aspect('equal')
+        #         ax_poly.set_title(f'Polygon sent to GEE API (Field: {AppNo})')
+        #         debug_poly_path = os.path.join(PNG_PATH, 'DEBUG_polygon_satellite.png')
+        #         plt.savefig(debug_poly_path, dpi=150, bbox_inches='tight')
+        #         plt.close(fig_poly)
+        #         print(f"Saved: DEBUG_polygon_satellite.png to {PNG_PATH}")
+        # except Exception as e:
+        #     print(f"Warning: Could not save debug polygon: {e}")
         
         # Initialize GEE and process
         try:
@@ -338,7 +338,7 @@ class FarmVisionModelServiceGEE:
             if task['cloud_mask'] is not None:
                 arr = np.where(task['cloud_mask'] == 1, arr, np.nan)
             
-            # Generate PNG (rendering is CPU intensive)
+            # Generate PNG temporarily (rendering is CPU intensive)
             generate_index_png(
                 index_array=arr,
                 polygon_gdf=task['farm_polygon'],
@@ -350,7 +350,15 @@ class FarmVisionModelServiceGEE:
             
             # Upload to server (I/O intensive)
             url = upload_to_server(png_path, task['AppNo'], idx_lower, task['date_str'])
-            return idx_lower, url or png_path
+            
+            # Clean up local file after upload - no need to keep on disk
+            try:
+                if os.path.exists(png_path):
+                    os.remove(png_path)
+            except Exception:
+                pass
+            
+            return idx_lower, url or ''
 
         print(f"Processing {len(tasks)} index maps sequentially...")
         # NOTE: matplotlib is not fully thread-safe, so process sequentially

@@ -13,6 +13,9 @@ import json
 import os
 import concurrent.futures
 
+# Load .env file for local development
+from dotenv import load_dotenv
+load_dotenv()
 
 # Path to service account key file
 SERVICE_ACCOUNT_KEY = os.path.join(
@@ -52,27 +55,45 @@ class GEEService:
             return True
         
         try:
-            # Load service account credentials from JSON file
-            if os.path.exists(SERVICE_ACCOUNT_KEY):
+            key_file_path = None
+            
+            # Option 1: Load from environment variable (for Render / production)
+            env_key = os.environ.get('GEE_SERVICE_ACCOUNT_KEY')
+            if env_key:
+                import base64
+                import tempfile
+                key_json = base64.b64decode(env_key).decode('utf-8')
+                key_data = json.loads(key_json)
+                
+                # Write to temp file (ee.ServiceAccountCredentials needs a file path)
+                tmp_file = os.path.join(tempfile.gettempdir(), 'gee_key.json')
+                with open(tmp_file, 'w') as f:
+                    f.write(key_json)
+                key_file_path = tmp_file
+                print("Using GEE credentials from environment variable")
+            
+            # Option 2: Load from local file (for local development)
+            elif os.path.exists(SERVICE_ACCOUNT_KEY):
                 with open(SERVICE_ACCOUNT_KEY, 'r') as f:
                     key_data = json.load(f)
-                
+                key_file_path = SERVICE_ACCOUNT_KEY
+                print("Using GEE credentials from local file")
+            
+            if key_file_path:
                 service_account_email = key_data.get('client_email')
                 
-                # Create credentials from service account
                 credentials = ee.ServiceAccountCredentials(
                     email=service_account_email,
-                    key_file=SERVICE_ACCOUNT_KEY
+                    key_file=key_file_path
                 )
                 
-                # Initialize with credentials and project
                 ee.Initialize(credentials, project=GEE_PROJECT)
                 cls._initialized = True
                 print(f"OK: GEE initialized with service account: {service_account_email}")
                 return True
             else:
-                # Fallback to OAuth if no service account key
-                print("⚠️  Service account key not found, trying OAuth...")
+                # Fallback to OAuth if no credentials found
+                print("⚠️  No service account credentials found, trying OAuth...")
                 ee.Authenticate()
                 ee.Initialize(project=GEE_PROJECT)
                 cls._initialized = True
