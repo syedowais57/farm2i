@@ -1,0 +1,53 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  farm2i - Sentinel-2 Vegetation Indices API (GEE) on AWS Lambda
+
+Globals:
+  Function:
+    Timeout: 900 # 15 minutes (max Lambda timeout)
+    MemorySize: 2048 # 2GB RAM for geospatial processing
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        GEE_SERVICE_ACCOUNT_KEY: "ew0KICAidHlwZSI6ICJzZXJ2aWNlX2FjY291bnQiLA0KICAicHJvamVjdF9pZCI6ICJuYW1lZC1tYWduZXQtNDg2NDA5LWYxIiwNCiAgInByaXZhdGVfa2V5X2lkIjogIjk5MDkyNjk5MzgxZDkwZTczZjE4ZTMxY2FhODU1Zjg0YTZkZDJlNjMiLA0KICAicHJpdmF0ZV9rZXkiOiAiLS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tXG5NSUlFdmdJQkFEQU5CZ2txaGtpRzl3MEJBUUVGQUFTQ0JLZ3dnZ1NrQWdFQUFvSUJBUUM3QmdRZDh5RUExTzVwXG5peXpJMk9WbVVWclpEUVRqSjlqdFlNZHBJeklNYkthay8vOS9BRVJZT25TQUtESDNINWo2UVRqT1diVFFoNFBDXG5qTzJncnB6TUF5bmZNeEtCVVMwNUkyczVRRmhlUWlEUThDNkQvNmt0ZGpNTXlRaUtNN0luNjBSUHNlWUU4ODdHXG5IUyt4TTU5SlQrTk5FcHJ5bFlsTTBVaWVRU2w2UXFlQTA2RUJZUGhZaWx2QlVHc2ZyeHFKcm9DWmxiVTRtdG1SXG42R1hZQjR2L1JlQjB4RERiUkhhSWxwbldvdmxxTTNSUUoxVldFaHI5MThidXNFZndDZ2FwaG14djA1aUFhUndhXG42cnFZYVA2WXQwUXdOMzc2cUlSWm5nMFBWelhITnloVjJzMnJSeXRjQk5ETWtTd1Uzb29GU0g0QVR3V0NTUjc5XG5mWFJHZXF4ckFnTUJBQUVDZ2dFQUFoaEdnMk1VdEtCU2hMN1dzTy9OazdVSHQ5U0diaUhKeFpuQ1JGU1JoU2lJXG45MUFGNVdPaDRGZjQvUmJJZEgycHdjZlhHUjdqOTEvOEVPZHhvYWpubTJ0a09TeTQ2bzRLQUpERXlGV1pHaFNiXG45K3NucHN4cjhYbWhoM2VoMktRb1R6TGZFRjIraVowOEVWTk5wcXF1MjdWS1M5aFprNGRQc0wvTHBvR1JXQUsyXG41dzk0NFVocGlzdmwrbHZXeG40dDdHVEJQWnpnZmIvdzRLbHVlZFVtZHRJdnphRENON1hPeDNDcDNyT0xoak5mXG5PYWRsR21VUUpkUWJBcEFiMFQ1R2VWdHZvZ2tSNERhS3FTRmY4YmNsUkhWUnlLY0V0SnZXYm0wTmtrai9LMXpBXG5TM24yVDN1QnhDMVczZTE5OWFJVkhHbXUwSS9QYm1od01PWTM3L2xaQVFLQmdRRHpuZmRWNHpVRXp1TDZScHdoXG5xSlB4T2tIOWpxOVI5bGcraDdGbE85RVNTeWR1dlNzVkIySUJDSTNWb3VIaEV6aERUVlhyQ2pjbW9RQko2OW82XG5MZ1RMTDNYTW51SVhuVmJsaGlOdEUxZTRKazlkaXZ5Q3ZVUWhVZmRPc2RQVmtnS1ZYTGI2SHBiMlhyVVc1MzVpXG5MTkxnWjZkRUcrOVRtcVNXKzVkcXdndlhBUUtCZ1FERWg2Sk1mNlJtLzFsdys3b2sxTnV4Nm9hcm5nYjFhVkZiXG5sVTNZdktCaml6Qml5VFo0R3V0SDV6VGZvQmUwQkNxeUhFaXh2SjFjdVRnbFJPZm4rS1FCOERndlRzU01CZE1QXG5neHJmN3ljYU1naDJDWU1tTi9pOG5TcWtsdzV3Y3MrQ1lPWnNQZ0x5S3FLOFhnK0QxejNZaGR6aGhwZ0xOSzliXG5obWJIZHE3UGF3S0JnUURsUmE5MngyUW9hRVM1WWlhaWpyTGMvZ1VKQ25YNVh5eGhmUGI0M1RqQVRMYUp3OEorXG5BZnE4R2o3UjVuOUtnZm9iYlBjRlF4SHdhdW1JcUUweklBZ202VDJtRzRtUXkrVHlFakhZLzdFNGYrV0ZsYjViXG5sS0EvODVJYUg4WExZNlRHeVFEem1FSmZEM2JDWFk5VitmVmtlR2kwOHMxa0UwLy9RRHlhbnBEaUFRS0JnQjRoXG5yWUNORVdlNVByMVQydlpLckdSYTBNci9MNUh3MDhoMjI3aWZNdmdRSHhzR1BwT3JqT2M1UzZIOXFhU3YvdHZQXG4rbFZGMWRxaGl6b3JsbUs2ZkdyUHFjMlhCZ3R4MlNwSHI1Y2wwNWp3a3R1R0dkV0NQMkNydUI0RUN2S3lwNTRWXG52VDViUTVoZGNSWHdWZkNnejVxaTYzcW9hQ2RQckpNYnlDWk16QUNCQW9HQkFMRExVRW5JUk5zcTVJTnkzRmJMXG5ITG04OE5NOHRUV1ZWcmxTUWNOZUdLckZlb0Y3U0x6REV5YWFuRzlKSTNsN200MkdlZk01NmxKTFpPci80c2JwXG40ZnVIS2wwWXpMNHJBcGFlZi8xRklKYTNsQzM0Y2NIY0xhaEhKK0x2K21qWDc5RzNzU0VtRnVGZ0ZpUHN2SUt0XG5LVnB3cVJpWmdSS2FWc3N6NWZWUnhEd0Ncbi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS1cbiIsDQogICJjbGllbnRfZW1haWwiOiAiZ2VlLXNlcnZpY2VAbmFtZWQtbWFnbmV0LTQ4NjQwOS1mMS5pYW0uZ3NlcnZpY2VhY2NvdW50LmNvbSIsDQogICJjbGllbnRfaWQiOiAiMTAyMDk3MzYyMjg4OTMxNjEwMjUxIiwNCiAgImF1dGhfdXJpIjogImh0dHBzOi8vYWNjb3VudHMuZ29vZ2xlLmNvbS9vL29hdXRoMi9hdXRoIiwNCiAgInRva2VuX3VyaSI6ICJodHRwczovL29hdXRoMi5nb29nbGVhcGlzLmNvbS90b2tlbiIsDQogICJhdXRoX3Byb3ZpZGVyX3g1MDlfY2VydF91cmwiOiAiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vb2F1dGgyL3YxL2NlcnRzIiwNCiAgImNsaWVudF94NTA5X2NlcnRfdXJsIjogImh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL3JvYm90L3YxL21ldGFkYXRhL3g1MDkvZ2VlLXNlcnZpY2UlNDBuYW1lZC1tYWduZXQtNDg2NDA5LWYxLmlhbS5nc2VydmljZWFjY291bnQuY29tIiwNCiAgInVuaXZlcnNlX2RvbWFpbiI6ICJnb29nbGVhcGlzLmNvbSINCn0NCg=="
+        MPLCONFIGDIR: "/tmp/matplotlib"
+
+Resources:
+  Farm2iApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      ImageUri: 339713167139.dkr.ecr.ap-south-1.amazonaws.com/farm2i:latest
+      ImageConfig:
+        Command: ["app.main.handler"]
+      # Lambda Function URL — supports responses up to 15 minutes (no 29s limit)
+      FunctionUrlConfig:
+        AuthType: NONE
+        Cors:
+          AllowOrigins:
+            - "*"
+          AllowMethods:
+            - "*"
+          AllowHeaders:
+            - "*"
+      Events:
+        FastApiProxy:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+        FastApiRoot:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+
+Outputs:
+  Farm2iApi:
+    Description: "API Gateway endpoint URL (29s timeout)"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  Farm2iFunctionUrl:
+    Description: "Lambda Function URL (up to 15min timeout — USE THIS ONE)"
+    Value: !GetAtt Farm2iApiFunctionUrl.FunctionUrl

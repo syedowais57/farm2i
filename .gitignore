@@ -41,3 +41,6 @@ diag_bounds.py
 uvicorn_debug.log
 *.log
 *.txt
+
+# AWS SAM
+.aws-sam/

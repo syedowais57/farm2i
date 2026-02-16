@@ -122,8 +122,8 @@ async def calculate_indices(request: IndicesRequest):
                 detail="Invalid polygon geometry. Please check your coordinates."
             )
         
-        # Set output directory
-        temp_path = './image_data/'
+        # Set output directory (/tmp is the only writable dir on Lambda)
+        temp_path = '/tmp/image_data/'
         
         # Validate and prepare indices list
         valid_indices = {
@@ -232,3 +232,10 @@ async def calculate_indices(request: IndicesRequest):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# Lambda handler
+try:
+    from mangum import Mangum
+    handler = Mangum(app)
+except ImportError:
+    pass
