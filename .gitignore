@@ -35,6 +35,7 @@ Thumbs.db
 
 # Credentials and Scripts
 *.json
+.env
 *original.py
 diag_bounds.py
 uvicorn_debug.log
