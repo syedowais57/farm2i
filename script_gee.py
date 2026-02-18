@@ -31,31 +31,39 @@ warnings.filterwarnings("ignore")
 UPLOAD_API_ENDPOINT = 'https://farm2i.saibbyweb.com/upload'
 
 
-def upload_to_server(file_path, field_id, index_type, date_str):
-    """Upload a PNG mask file to the remote server."""
-    try:
-        if not os.path.exists(file_path):
-            print(f"File not found: {file_path}")
-            return None
-            
-        with open(file_path, 'rb') as f:
-            filename = f"{field_id}_{date_str}_{index_type}.png"
-            files = {'file': (filename, f, 'image/png')}
-            data = {'field_id': field_id, 'index_type': index_type, 'date': date_str}
-            
-            response = requests.post(UPLOAD_API_ENDPOINT, files=files, data=data, timeout=30)
-            
-            if response.status_code in [200, 201]:
-                result = response.json()
-                print(f"Uploaded {filename} successfully")
-                return result.get('url', result.get('path', filename))
-            else:
-                print(f"Upload failed: {response.status_code}")
+def upload_to_server(file_path, field_id, index_type, date_str, max_retries=3):
+    """Upload a PNG mask file to the remote server with retries."""
+    filename = f"{field_id}_{date_str}_{index_type}.png"
+    for attempt in range(max_retries):
+        try:
+            if not os.path.exists(file_path):
+                print(f"❌ File not found for upload: {file_path}")
                 return None
                 
-    except Exception as e:
-        print(f"Upload error: {str(e)}")
-        return None
+            with open(file_path, 'rb') as f:
+                files = {'file': (filename, f, 'image/png')}
+                data = {'field_id': field_id, 'index_type': index_type, 'date': date_str}
+                
+                # Using a shorter timeout for each attempt to allow for retries
+                response = requests.post(UPLOAD_API_ENDPOINT, files=files, data=data, timeout=20)
+                
+                if response.status_code in [200, 201]:
+                    result = response.json()
+                    url = result.get('url', result.get('path', filename))
+                    print(f"✅ Uploaded {filename} successfully (Attempt {attempt+1})")
+                    return url
+                else:
+                    print(f"⚠️ Upload failed for {filename}: HTTP {response.status_code} (attempt {attempt+1}/{max_retries})")
+                    if attempt < max_retries - 1:
+                        time.sleep(1) # Wait before retry
+                        
+        except Exception as e:
+            print(f"❌ Upload error for {filename}: {str(e)} (attempt {attempt+1}/{max_retries})")
+            if attempt < max_retries - 1:
+                time.sleep(1)
+                
+    print(f"❌ Giving up on uploading {filename} after {max_retries} attempts")
+    return None
 
 
 def get_color_scale(index_name):
@@ -121,78 +129,68 @@ def get_color_scale(index_name):
     return scales.get(index_name, scales['NDVI'])
 
 
-def generate_index_png(index_array, polygon_gdf, output_path, index_name, pixel_scale=100, actual_bounds=None):
+def generate_index_png(index_array, polygon_gdf, output_path, index_name, pixel_scale=10, actual_bounds=None):
     """
-    Generate a PNG image for a vegetation index.
-    Matches the original script.py implementation with proper clipping.
+    Generate a PNG image for a vegetation index with pixel-perfect alignment.
+    Ensures the output image exactly covers the provided actual_bounds.
     """
+    from matplotlib.colors import ListedColormap, BoundaryNorm
     from matplotlib.patches import Polygon as MplPolygon
     
     # Scale to -10000 to 10000 range
     INDEX = index_array * 10000
-    INDEX = np.around(INDEX, 2)
     
     # Get color scale
     scale = get_color_scale(index_name)
     cmap = ListedColormap(scale['colors'])
     norm = BoundaryNorm(scale['bounds'], cmap.N)
+    cmap.set_bad(color=(0, 0, 0, 0)) # Fully transparent for NaNs
     
     # Upsample for smoother output
     INDEX_scaled = zoom(INDEX, pixel_scale, order=1)
     img_h, img_w = INDEX_scaled.shape
     
-    print(f"--- {index_name} - Original: {INDEX.shape}, Upscaled: {INDEX_scaled.shape}")
+    # Create figure with 0 margins, matching pixel dimensions
+    dpi = 100
+    fig = plt.figure(figsize=(img_w/dpi, img_h/dpi), dpi=dpi)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.axis('off')
     
-    # Create figure
-    fig, ax = plt.subplots()
-    cmap.set_bad(color='none')  # Make NaN transparent
-    im = ax.imshow(INDEX_scaled, cmap=cmap, norm=norm, interpolation='bilinear')
+    # Show the data with nearest interpolation to keep mask boundaries sharp
+    im = ax.imshow(INDEX_scaled, cmap=cmap, norm=norm, interpolation='nearest')
     
     # Clip to polygon shape
     if polygon_gdf is not None and len(polygon_gdf) > 0:
         poly_geom = polygon_gdf.iloc[0]['geometry']
         
-        if hasattr(poly_geom, 'exterior'):
-            # Use actual GEE bounds for coordinate mapping
-            if actual_bounds:
-                minx, miny = actual_bounds['minx'], actual_bounds['miny']
-                maxx, maxy = actual_bounds['maxx'], actual_bounds['maxy']
-            else:
-                minx, miny, maxx, maxy = polygon_gdf.total_bounds
+        if hasattr(poly_geom, 'exterior') and actual_bounds:
+            minx, miny = actual_bounds['minx'], actual_bounds['miny']
+            maxx, maxy = actual_bounds['maxx'], actual_bounds['maxy']
             
             coords = list(poly_geom.exterior.coords)
             scaled_coords = []
             
             for x, y in coords:
-                # Scale polygon coordinates to image pixel coordinates
-                px = (x - minx) / (maxx - minx) * img_w
-                py = img_h - (y - miny) / (maxy - miny) * img_h
+                # Map coordinates exactly to the pixel grid
+                if maxx != minx:
+                    px = (x - minx) / (maxx - minx) * img_w
+                else:
+                    px = 0
+                    
+                if maxy != miny:
+                    py = img_h - (y - miny) / (maxy - miny) * img_h
+                else:
+                    py = 0
                 scaled_coords.append([px, py])
             
-            # Apply a small buffer to prevent edge pixel cutting
-            PIXEL_BUFFER = 2
-            centroid_x = sum(c[0] for c in scaled_coords) / len(scaled_coords)
-            centroid_y = sum(c[1] for c in scaled_coords) / len(scaled_coords)
-            buffered_coords = []
-            
-            for px, py in scaled_coords:
-                dx = px - centroid_x
-                dy = py - centroid_y
-                dist = (dx**2 + dy**2) ** 0.5
-                if dist > 0:
-                    px += (dx / dist) * PIXEL_BUFFER
-                    py += (dy / dist) * PIXEL_BUFFER
-                buffered_coords.append([px, py])
-            
-            # Create polygon patch for clipping
-            polygon_patch = MplPolygon(buffered_coords, closed=True, transform=ax.transData)
+            # Create and apply the clipping patch
+            polygon_patch = MplPolygon(scaled_coords, closed=True, transform=ax.transData)
             im.set_clip_path(polygon_patch)
     
-    ax.axis('off')
-    plt.savefig(output_path, bbox_inches='tight', pad_inches=0.05, transparent=True, dpi=150)
+    # Save WITHOUT bbox_inches='tight' to maintain exact pixel mapping
+    plt.savefig(output_path, transparent=True, dpi=dpi)
     plt.close(fig)
     
-    print(f"Saved: {output_path}")
     return output_path
 
 
@@ -334,29 +332,34 @@ class FarmVisionModelServiceGEE:
             png_filename = f"{task['AppNo']}_{task['date_str']}_{idx_lower}.png"
             png_path = os.path.join(PNG_PATH, png_filename)
             
-            arr = task['arr']
-            if task['cloud_mask'] is not None:
-                arr = np.where(task['cloud_mask'] == 1, arr, np.nan)
-            
-            # Generate PNG temporarily (rendering is CPU intensive)
-            generate_index_png(
-                index_array=arr,
-                polygon_gdf=task['farm_polygon'],
-                output_path=png_path,
-                index_name=task['idx_name'],
-                pixel_scale=20,
-                actual_bounds=task['bounds_data']
-            )
-            
-            # Upload to server (I/O intensive)
-            url = upload_to_server(png_path, task['AppNo'], idx_lower, task['date_str'])
-            
-            # Clean up local file after upload - no need to keep on disk
             try:
-                if os.path.exists(png_path):
-                    os.remove(png_path)
-            except Exception:
-                pass
+                arr = task['arr']
+                if task['cloud_mask'] is not None:
+                    arr = np.where(task['cloud_mask'] == 1, arr, np.nan)
+                
+                # Generate PNG temporarily
+                generate_index_png(
+                    index_array=arr,
+                    polygon_gdf=task['farm_polygon'],
+                    output_path=png_path,
+                    index_name=task['idx_name'],
+                    pixel_scale=20,
+                    actual_bounds=task['bounds_data']
+                )
+                
+                # Upload to server
+                url = upload_to_server(png_path, task['AppNo'], idx_lower, task['date_str'])
+                
+            except Exception as e:
+                print(f"❌ Error processing {png_filename}: {str(e)}")
+                url = None
+            finally:
+                # Clean up local file after upload attempt
+                try:
+                    if os.path.exists(png_path):
+                        os.remove(png_path)
+                except Exception:
+                    pass
             
             return idx_lower, url or ''
 

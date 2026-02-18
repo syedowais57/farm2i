@@ -1,0 +1,12 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "farm2i"
+resolve_s3 = true
+s3_prefix = "farm2i"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+image_repositories = ["Farm2iApiFunction=339713167139.dkr.ecr.ap-south-1.amazonaws.com/farm2i10a8c163/farm2iapifunction6c7346dfrepo"]
+
+[default.global.parameters]
+region = "ap-south-1"

@@ -17,9 +17,12 @@ Globals:
 Resources:
   Farm2iApiFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      DockerTag: python3.9-v1
+      DockerContext: .
+      Dockerfile: Dockerfile
     Properties:
       PackageType: Image
-      ImageUri: 339713167139.dkr.ecr.ap-south-1.amazonaws.com/farm2i:latest
       ImageConfig:
         Command: ["app.main.handler"]
       # Lambda Function URL — supports responses up to 15 minutes (no 29s limit)

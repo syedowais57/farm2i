@@ -20,7 +20,7 @@ class IndicesRequest(BaseModel):
         description="List of coordinates forming a polygon (minimum 3 points)"
     )
     start_date: str = Field(..., description="Start date in YYYY-MM-DD format")
-    end_date: str = Field(..., description="End date in YYYY-MM-DD format")
+    end_date: Optional[str] = Field(default=None, description="End date in YYYY-MM-DD format. Defaults to start_date if not provided.")
     field_id: Optional[str] = Field(
         default=None, 
         description="Optional field identifier"
@@ -41,6 +41,10 @@ class IndicesRequest(BaseModel):
         default=False,
         description="If true, return only the single best image per month (lowest cloud cover, most recent on ties). Ideal for monthly reporting."
     )
+    webhook_url: Optional[str] = Field(
+        default=None,
+        description="Optional URL to POST the results to upon completion."
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -56,7 +60,8 @@ class IndicesRequest(BaseModel):
                     "end_date": "2025-05-10",
                     "field_id": "testing_payment",
                     "indices": ["NDVI", "EVI"],
-                    "best_per_month": True
+                    "best_per_month": True,
+                    "webhook_url": "https://webhook.site/..."
                 }
             ]
         }

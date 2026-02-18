@@ -9,9 +9,11 @@ Data Source: Google Earth Engine (COPERNICUS/S2_SR_HARMONIZED)
 """
 import sys
 import os
+from datetime import datetime, timedelta
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -108,8 +110,24 @@ async def calculate_indices(request: IndicesRequest):
     """
     start_time = time.time()
     
+    # Log the incoming request for debugging
+    print(f"Received request: {request.model_dump()}")
+    
     # Generate field_id if not provided
     field_id = request.field_id or f"field_{uuid.uuid4().hex[:8]}"
+    
+    # Handle single date (if end_date is missing)
+    if not request.end_date:
+        request.end_date = request.start_date
+        
+    # Ensure end_date includes the full start day (GEE end_date is exclusive)
+    if request.start_date == request.end_date:
+        try:
+            start_dt = datetime.strptime(request.start_date, "%Y-%m-%d")
+            end_dt = start_dt + timedelta(days=1)
+            request.end_date = end_dt.strftime("%Y-%m-%d")
+        except ValueError:
+            pass # Invalid format will be caught by validation or GEE
     
     try:
         # Convert coordinates to Shapely Polygon
@@ -216,6 +234,18 @@ async def calculate_indices(request: IndicesRequest):
             ),
             message=f"Successfully calculated indices for {len(dates)} dates"
         )
+        
+        # Send to webhook if provided
+        if request.webhook_url:
+            try:
+                import requests
+                # Send the response data as JSON
+                requests.post(request.webhook_url, json=response.model_dump(), timeout=10)
+            except Exception as e:
+                # Log error but don't fail the request
+                print(f"Failed to send webhook to {request.webhook_url}: {e}")
+                # We could optionally add a warning to the response message
+                response.message += f" (Webhook failed: {str(e)})"
         
         return response
         

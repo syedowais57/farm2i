@@ -526,7 +526,8 @@ class GEEService:
             return {
                 'dates': [],
                 'cloud_cover': [],
-                'indices': {idx: [] for idx in indices}
+                'indices': {idx: [] for idx in indices},
+                'image_data': []
             }
         
         print(f"Found {len(image_info)} images")
