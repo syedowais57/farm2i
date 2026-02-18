@@ -469,6 +469,64 @@ class GEEService:
         print(f"   Best-per-month: selected {len(best)} images from {len(parallel_results)} total")
         return best
     
+    @staticmethod
+    def select_best_n_images(parallel_results: list, start_date: str, end_date: str, n: int = 7) -> list:
+        """
+        Select the best N images evenly spaced across the date range.
+        Divides the range into N equal time windows and picks the least-cloudy
+        image from each window. On ties, the most recent date wins.
+        
+        Args:
+            parallel_results: List of dicts with 'date' (YYYY-MM-DD) and 'cloud_cover' keys.
+            start_date: Start date string (YYYY-MM-DD).
+            end_date: End date string (YYYY-MM-DD).
+            n: Number of images to return (default 7).
+        Returns:
+            Filtered list with at most N entries, sorted chronologically.
+        """
+        from datetime import datetime, timedelta
+        
+        if not parallel_results:
+            return []
+        
+        dt_start = datetime.strptime(start_date, '%Y-%m-%d')
+        dt_end = datetime.strptime(end_date, '%Y-%m-%d')
+        total_days = (dt_end - dt_start).days
+        
+        if total_days <= 0:
+            return parallel_results[:1]  # edge case
+        
+        # Divide into N equal windows
+        window_days = total_days / n
+        
+        best = []
+        for i in range(n):
+            window_start = dt_start + timedelta(days=i * window_days)
+            window_end = dt_start + timedelta(days=(i + 1) * window_days)
+            
+            # Find images within this window
+            window_images = []
+            for res in parallel_results:
+                img_date = datetime.strptime(res['date'], '%Y-%m-%d')
+                if window_start <= img_date < window_end:
+                    window_images.append(res)
+            
+            if not window_images:
+                continue  # no images in this window, skip
+            
+            # Pick lowest cloud cover; on ties, most recent date
+            window_images.sort(key=lambda x: (x['cloud_cover'], x['date']))
+            min_cloud = window_images[0]['cloud_cover']
+            candidates = [img for img in window_images if img['cloud_cover'] == min_cloud]
+            candidates.sort(key=lambda x: x['date'], reverse=True)
+            best.append(candidates[0])
+        
+        # Sort chronologically
+        best.sort(key=lambda x: x['date'])
+        
+        print(f"   Best-n-images: selected {len(best)} images from {len(parallel_results)} total (requested {n})")
+        return best
+    
     @classmethod
     def process_polygon(
         cls,
@@ -478,7 +536,8 @@ class GEEService:
         indices: List[str] = None,
         padding_meters: int = 10,
         max_cloud_cover: int = 100,
-        best_per_month: bool = False
+        best_per_month: bool = False,
+        best_n_images: int = None
     ) -> Dict:
         """
         Main processing function - equivalent to STAC version
@@ -490,6 +549,7 @@ class GEEService:
             indices: List of indices to calculate (default: all)
             padding_meters: Buffer around polygon
             best_per_month: If True, return only the best image per month
+            best_n_images: If set, return N evenly-spaced least-cloudy images
             
         Returns:
             Dictionary with dates, cloud cover, and index values
@@ -592,8 +652,10 @@ class GEEService:
         # Sort results by date to maintain chronological order
         parallel_results.sort(key=lambda x: x['date'])
         
-        # Apply best-per-month filtering if requested
-        if best_per_month:
+        # Apply image selection filtering
+        if best_n_images and best_n_images > 0:
+            parallel_results = cls.select_best_n_images(parallel_results, start_date, end_date, best_n_images)
+        elif best_per_month:
             parallel_results = cls.select_best_per_month(parallel_results)
         
         for res in parallel_results:

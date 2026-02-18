@@ -200,7 +200,7 @@ class FarmVisionModelServiceGEE:
     """GEE-based Farm Vision Model Service"""
     
     @staticmethod
-    def calculateINDEXService(start_date, end_date, ApplNo, poly, temp, indices=None, padding_meters=10, max_cloud_cover=100, best_per_month=False):
+    def calculateINDEXService(start_date, end_date, ApplNo, poly, temp, indices=None, padding_meters=10, max_cloud_cover=100, best_per_month=False, best_n_images=None):
         """
         Calculate vegetation indices using Google Earth Engine
         
@@ -276,7 +276,8 @@ class FarmVisionModelServiceGEE:
                 indices=indices,
                 padding_meters=padding_meters,
                 max_cloud_cover=max_cloud_cover,
-                best_per_month=best_per_month
+                best_per_month=best_per_month,
+                best_n_images=best_n_images
             )
         except Exception as e:
             print(f"❌ GEE processing failed: {e}")

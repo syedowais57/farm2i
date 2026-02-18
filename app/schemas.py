@@ -41,6 +41,10 @@ class IndicesRequest(BaseModel):
         default=False,
         description="If true, return only the single best image per month (lowest cloud cover, most recent on ties). Ideal for monthly reporting."
     )
+    best_n_images: Optional[int] = Field(
+        default=None,
+        description="If set, return exactly N evenly-spaced images across the date range, picking least cloudy from each window. Recommended: 7 for ~90 day ranges. Takes priority over best_per_month."
+    )
 
     model_config = {
         "json_schema_extra": {
