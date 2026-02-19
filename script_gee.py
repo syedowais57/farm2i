@@ -129,68 +129,78 @@ def get_color_scale(index_name):
     return scales.get(index_name, scales['NDVI'])
 
 
-def generate_index_png(index_array, polygon_gdf, output_path, index_name, pixel_scale=10, actual_bounds=None):
+def generate_index_png(index_array, polygon_gdf, output_path, index_name, pixel_scale=20, actual_bounds=None):
     """
-    Generate a PNG image for a vegetation index with pixel-perfect alignment.
-    Ensures the output image exactly covers the provided actual_bounds.
+    Generate a PNG image for a vegetation index.
+    Matches the original script.py implementation with proper clipping.
     """
-    from matplotlib.colors import ListedColormap, BoundaryNorm
     from matplotlib.patches import Polygon as MplPolygon
     
     # Scale to -10000 to 10000 range
     INDEX = index_array * 10000
+    INDEX = np.around(INDEX, 2)
     
     # Get color scale
     scale = get_color_scale(index_name)
     cmap = ListedColormap(scale['colors'])
     norm = BoundaryNorm(scale['bounds'], cmap.N)
-    cmap.set_bad(color=(0, 0, 0, 0)) # Fully transparent for NaNs
     
     # Upsample for smoother output
     INDEX_scaled = zoom(INDEX, pixel_scale, order=1)
     img_h, img_w = INDEX_scaled.shape
     
-    # Create figure with 0 margins, matching pixel dimensions
-    dpi = 100
-    fig = plt.figure(figsize=(img_w/dpi, img_h/dpi), dpi=dpi)
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.axis('off')
+    print(f"--- {index_name} - Original: {INDEX.shape}, Upscaled: {INDEX_scaled.shape}")
     
-    # Show the data with nearest interpolation to keep mask boundaries sharp
-    im = ax.imshow(INDEX_scaled, cmap=cmap, norm=norm, interpolation='nearest')
+    # Create figure
+    fig, ax = plt.subplots()
+    cmap.set_bad(color='none')  # Make NaN transparent
+    im = ax.imshow(INDEX_scaled, cmap=cmap, norm=norm, interpolation='bilinear')
     
     # Clip to polygon shape
     if polygon_gdf is not None and len(polygon_gdf) > 0:
         poly_geom = polygon_gdf.iloc[0]['geometry']
         
-        if hasattr(poly_geom, 'exterior') and actual_bounds:
-            minx, miny = actual_bounds['minx'], actual_bounds['miny']
-            maxx, maxy = actual_bounds['maxx'], actual_bounds['maxy']
+        if hasattr(poly_geom, 'exterior'):
+            # Use actual GEE bounds for coordinate mapping
+            if actual_bounds:
+                minx, miny = actual_bounds['minx'], actual_bounds['miny']
+                maxx, maxy = actual_bounds['maxx'], actual_bounds['maxy']
+            else:
+                minx, miny, maxx, maxy = polygon_gdf.total_bounds
             
             coords = list(poly_geom.exterior.coords)
             scaled_coords = []
             
             for x, y in coords:
-                # Map coordinates exactly to the pixel grid
-                if maxx != minx:
-                    px = (x - minx) / (maxx - minx) * img_w
-                else:
-                    px = 0
-                    
-                if maxy != miny:
-                    py = img_h - (y - miny) / (maxy - miny) * img_h
-                else:
-                    py = 0
+                # Scale polygon coordinates to image pixel coordinates
+                px = (x - minx) / (maxx - minx) * img_w
+                py = img_h - (y - miny) / (maxy - miny) * img_h
                 scaled_coords.append([px, py])
             
-            # Create and apply the clipping patch
-            polygon_patch = MplPolygon(scaled_coords, closed=True, transform=ax.transData)
+            # Apply a small buffer to prevent edge pixel cutting
+            PIXEL_BUFFER = 2
+            centroid_x = sum(c[0] for c in scaled_coords) / len(scaled_coords)
+            centroid_y = sum(c[1] for c in scaled_coords) / len(scaled_coords)
+            buffered_coords = []
+            
+            for px, py in scaled_coords:
+                dx = px - centroid_x
+                dy = py - centroid_y
+                dist = (dx**2 + dy**2) ** 0.5
+                if dist > 0:
+                    px += (dx / dist) * PIXEL_BUFFER
+                    py += (dy / dist) * PIXEL_BUFFER
+                buffered_coords.append([px, py])
+            
+            # Create polygon patch for clipping
+            polygon_patch = MplPolygon(buffered_coords, closed=True, transform=ax.transData)
             im.set_clip_path(polygon_patch)
     
-    # Save WITHOUT bbox_inches='tight' to maintain exact pixel mapping
-    plt.savefig(output_path, transparent=True, dpi=dpi)
+    ax.axis('off')
+    plt.savefig(output_path, bbox_inches='tight', pad_inches=0.05, transparent=True, dpi=150)
     plt.close(fig)
     
+    print(f"Saved: {output_path}")
     return output_path
 
 

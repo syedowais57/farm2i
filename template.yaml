@@ -6,7 +6,7 @@ Description: >
 Globals:
   Function:
     Timeout: 900 # 15 minutes (max Lambda timeout)
-    MemorySize: 2048 # 2GB RAM for geospatial processing
+    MemorySize: 3008 # Increased to 3GB RAM for faster CPU and processing speed
     Architectures:
       - x86_64
     Environment:
